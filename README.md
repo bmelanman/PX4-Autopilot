@@ -139,4 +139,6 @@ The PX4 Autopilot project including all of its trademarks is hosted under [Drone
 
 ## Test Change
 
-This is a test change to make sure things are working properly
+This is a test change to make sure things are working properly.
+
+This sentence is for the second test!
