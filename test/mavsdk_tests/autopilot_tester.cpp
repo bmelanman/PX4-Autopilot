@@ -76,6 +76,7 @@ void AutopilotTester::connect(const std::string uri)
 	_offboard.reset(new Offboard(system));
 	_param.reset(new Param(system));
 	_telemetry.reset(new Telemetry(system));
+	_mavlink_passthrough.reset(new MavlinkPassthrough(system));
 }
 
 void AutopilotTester::wait_until_ready()
@@ -217,6 +218,12 @@ void AutopilotTester::wait_until_altitude(float rel_altitude_m, std::chrono::sec
 	});
 
 	REQUIRE(fut.wait_for(timeout) == std::future_status::ready);
+}
+
+void AutopilotTester::wait_until_fixedwing(std::chrono::seconds timeout)
+{
+	REQUIRE(poll_condition_with_timeout(
+	[this]() { return _telemetry->vtol_state() == Telemetry::VtolState::Fw; }, timeout));
 }
 
 void AutopilotTester::prepare_square_mission(MissionOptions mission_options)
@@ -603,6 +610,22 @@ void AutopilotTester::check_tracks_mission_raw(float corridor_radius_m, bool rev
 	});
 }
 
+void AutopilotTester::check_mission_land_within(float acceptance_radius_m)
+{
+	auto mission_raw = _mission_raw->download_mission();
+	CHECK(mission_raw.first == MissionRaw::Result::Success);
+
+	// Get last mission item
+	MissionRaw::MissionItem land_mission_item = mission_raw.second.back();
+	bool is_landing_item = (land_mission_item.command == 85) || (land_mission_item.command == 21);
+	CHECK(is_landing_item);
+	Telemetry::GroundTruth land_coord{};
+	land_coord.latitude_deg = static_cast<double>(land_mission_item.x) / 1E7;
+	land_coord.longitude_deg = static_cast<double>(land_mission_item.y) / 1E7;
+
+	CHECK(ground_truth_horizontal_position_close_to(land_coord, acceptance_radius_m));
+}
+
 void AutopilotTester::check_tracks_mission(float corridor_radius_m)
 {
 	auto mission = _mission->download_mission();
@@ -641,6 +664,22 @@ void AutopilotTester::execute_rtl_when_reaching_mission_sequence(int sequence_nu
 {
 	start_and_wait_for_mission_sequence_raw(sequence_number);
 	execute_rtl();
+}
+
+void AutopilotTester::send_custom_mavlink_command(const MavlinkPassthrough::CommandInt &command)
+{
+	_mavlink_passthrough->send_command_int(command);
+}
+
+void AutopilotTester::send_custom_mavlink_message(mavlink_message_t &message)
+{
+	_mavlink_passthrough->send_message(message);
+}
+
+void AutopilotTester::add_mavlink_message_callback(uint16_t message_id,
+		std::function< void(const mavlink_message_t &)> callback)
+{
+	_mavlink_passthrough->subscribe_message_async(message_id, std::move(callback));
 }
 
 std::array<float, 3> AutopilotTester::get_current_position_ned()
