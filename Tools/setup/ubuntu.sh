@@ -68,37 +68,38 @@ elif [[ "${UBUNTU_RELEASE}" == "22.04" ]]; then
 	echo "Ubuntu 22.04"
 fi
 
-
-echo
+echo ""
 echo "Installing PX4 general dependencies"
 
+apt_packages=(
+	astyle
+	build-essential
+	cmake
+	cppcheck
+	file
+	g++
+	gcc
+	gdb
+	git
+	lcov
+	libfuse2
+	libxml2-dev
+	libxml2-utils
+	make
+	ninja-build
+	python3
+	python3-dev
+	python3-pip
+	python3-setuptools
+	python3-wheel
+	rsync
+	shellcheck
+	unzip
+	zip
+)
+
 sudo apt-get update -y --quiet
-sudo DEBIAN_FRONTEND=noninteractive apt-get -y --quiet --no-install-recommends install \
-	astyle \
-	build-essential \
-	cmake \
-	cppcheck \
-	file \
-	g++ \
-	gcc \
-	gdb \
-	git \
-	lcov \
-	libfuse2 \
-	libxml2-dev \
-	libxml2-utils \
-	make \
-	ninja-build \
-	python3 \
-	python3-dev \
-	python3-pip \
-	python3-setuptools \
-	python3-wheel \
-	rsync \
-	shellcheck \
-	unzip \
-	zip \
-	;
+sudo DEBIAN_FRONTEND=noninteractive apt-get -y --quiet --no-install-recommends install ${apt_packages[@]}
 
 # Python3 dependencies
 echo
@@ -117,35 +118,43 @@ if [[ $INSTALL_NUTTX == "true" ]]; then
 	echo
 	echo "Installing NuttX dependencies"
 
-	sudo DEBIAN_FRONTEND=noninteractive apt-get -y --quiet --no-install-recommends install \
-		automake \
-		binutils-dev \
-		bison \
-		build-essential \
-		flex \
-		g++-multilib \
-		gcc-multilib \
-		gdb-multiarch \
-		genromfs \
-		gettext \
-		gperf \
-		libelf-dev \
-		libexpat-dev \
-		libgmp-dev \
-		libisl-dev \
-		libmpc-dev \
-		libmpfr-dev \
-		libncurses5 \
-		libncurses5-dev \
-		libncursesw5-dev \
-		libtool \
-		pkg-config \
-		screen \
-		texinfo \
-		u-boot-tools \
-		util-linux \
-		vim-common \
-		;
+	nuttx_packages=(
+		automake
+		binutils-dev
+		bison
+		build-essential
+		flex
+		gdb-multiarch
+		genromfs
+		gettext
+		gperf
+		libelf-dev
+		libexpat-dev
+		libgmp-dev
+		libisl-dev
+		libmpc-dev
+		libmpfr-dev
+		libncurses5
+		libncurses5-dev
+		libncursesw5-dev
+		libtool
+		pkg-config
+		screen
+		texinfo
+		u-boot-tools
+		util-linux
+		vim-common
+	)
+
+	if [[ ! "$(uname -m)" == "aarch64" ]]; then
+		nuttx_packages+=(
+			g++-multilib
+			gcc-multilib
+		)
+	fi
+
+	sudo DEBIAN_FRONTEND=noninteractive apt-get -y --quiet --no-install-recommends install ${nuttx_packages[@]}
+
 	if [[ "${UBUNTU_RELEASE}" == "20.04" || "${UBUNTU_RELEASE}" == "22.04" ]]; then
 		sudo DEBIAN_FRONTEND=noninteractive apt-get -y --quiet --no-install-recommends install \
 		kconfig-frontends \
