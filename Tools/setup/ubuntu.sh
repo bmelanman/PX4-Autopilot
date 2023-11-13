@@ -13,7 +13,8 @@ set -e
 
 INSTALL_NUTTX="true"
 INSTALL_SIM="true"
-INSTALL_ARCH=`uname -m`
+INSTALL_ARCH=$(uname -m)
+java_version=14
 
 # Parse arguments
 for arg in "$@"
@@ -52,7 +53,7 @@ fi
 
 # check ubuntu version
 # otherwise warn and point to docker?
-UBUNTU_RELEASE="`lsb_release -rs`"
+UBUNTU_RELEASE="$(lsb_release -rs)"
 
 if [[ "${UBUNTU_RELEASE}" == "14.04" ]]; then
 	echo "Ubuntu 14.04 is no longer supported"
@@ -61,10 +62,13 @@ elif [[ "${UBUNTU_RELEASE}" == "16.04" ]]; then
 	echo "Ubuntu 16.04 is no longer supported"
 	exit 1
 elif [[ "${UBUNTU_RELEASE}" == "18.04" ]]; then
+	java_version=11
 	echo "Ubuntu 18.04"
 elif [[ "${UBUNTU_RELEASE}" == "20.04" ]]; then
+	java_version=13
 	echo "Ubuntu 20.04"
 elif [[ "${UBUNTU_RELEASE}" == "22.04" ]]; then
+	java_version=11
 	echo "Ubuntu 22.04"
 fi
 
@@ -115,8 +119,7 @@ fi
 # NuttX toolchain (arm-none-eabi-gcc)
 if [[ $INSTALL_NUTTX == "true" ]]; then
 
-	echo
-	echo "Installing NuttX dependencies"
+	echo -e "\nInstalling NuttX dependencies"
 
 	nuttx_packages=(
 		automake
@@ -168,8 +171,8 @@ if [[ $INSTALL_NUTTX == "true" ]]; then
 	fi
 
 	# arm-none-eabi-gcc
-	NUTTX_GCC_VERSION="9-2020-q2-update"
-	NUTTX_GCC_VERSION_SHORT="9-2020q2"
+	NUTTX_GCC_VERSION="10-2020-q4-major"
+	NUTTX_GCC_VERSION_SHORT="10-2020q4"
 
 	source $HOME/.profile # load changed path for the case the script is reran before relogin
 	if [ $(which arm-none-eabi-gcc) ]; then
@@ -240,7 +243,7 @@ if [[ $INSTALL_SIM == "true" ]]; then
 		# Install Gazebo
 		gazebo_packages="gz-garden"
 	else
-		sudo sh -c 'echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable `lsb_release -cs` main" > /etc/apt/sources.list.d/gazebo-stable.list'
+		echo "deb http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/gazebo-stable.list
 		wget http://packages.osrfoundation.org/gazebo.key -O - | sudo apt-key add -
 		# Update list, since new gazebo-stable.list has been added
 		sudo apt-get update -y --quiet
