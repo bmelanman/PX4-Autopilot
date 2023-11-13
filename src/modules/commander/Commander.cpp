@@ -1694,6 +1694,8 @@ void Commander::run()
 
 		safetyButtonUpdate();
 
+		_multicopter_throw_launch.update(isArmed());
+
 		vtolStatusUpdate();
 
 		_home_position.update(_param_com_home_en.get(), !isArmed() && _vehicle_land_detected.landed);
@@ -1773,7 +1775,8 @@ void Commander::run()
 		_actuator_armed.prearmed = getPrearmState();
 		_actuator_armed.ready_to_arm = _vehicle_status.pre_flight_checks_pass || isArmed();
 		_actuator_armed.lockdown = ((_vehicle_status.nav_state == _vehicle_status.NAVIGATION_STATE_TERMINATION)
-					    || (_vehicle_status.hil_state == vehicle_status_s::HIL_STATE_ON));
+					    || (_vehicle_status.hil_state == vehicle_status_s::HIL_STATE_ON)
+					    || _multicopter_throw_launch.isThrowLaunchInProgress());
 		// _actuator_armed.manual_lockdown // action_request_s::ACTION_KILL
 		_actuator_armed.force_failsafe = (_vehicle_status.nav_state == _vehicle_status.NAVIGATION_STATE_TERMINATION);
 		// _actuator_armed.in_esc_calibration_mode // VEHICLE_CMD_PREFLIGHT_CALIBRATION
@@ -2085,6 +2088,9 @@ void Commander::updateTunes()
 	} else if (_vehicle_status.failsafe && isArmed()) {
 		tune_failsafe(true);
 
+	} else if (_multicopter_throw_launch.isReadyToThrow()) {
+		set_tune(tune_control_s::TUNE_ID_ARMING_WARNING);
+
 	} else {
 		set_tune(tune_control_s::TUNE_ID_STOP);
 	}
@@ -2141,7 +2147,7 @@ void Commander::handleAutoDisarm()
 				_auto_disarm_landed.set_state_and_update(true, hrt_absolute_time());
 			}
 
-			if (_auto_disarm_landed.get_state()) {
+			if (_auto_disarm_landed.get_state() && !_multicopter_throw_launch.isThrowLaunchInProgress()) {
 				if (_have_taken_off_since_arming) {
 					disarm(arm_disarm_reason_t::auto_disarm_land);
 
@@ -2159,6 +2165,9 @@ void Commander::handleAutoDisarm()
 		if (_vehicle_status.hil_state != vehicle_status_s::HIL_STATE_ON) {
 			auto_disarm |= _actuator_armed.lockdown;
 		}
+
+		//don't disarm if throw launch is in progress
+		auto_disarm &= !_multicopter_throw_launch.isThrowLaunchInProgress();
 
 		_auto_disarm_killed.set_state_and_update(auto_disarm, hrt_absolute_time());
 
@@ -2297,6 +2306,10 @@ void Commander::control_status_leds(bool changed, const uint8_t battery_warning)
 		if (overload && (time_now_us >= _overload_start + overload_warn_delay)) {
 			led_mode = led_control_s::MODE_BLINK_FAST;
 			led_color = led_control_s::COLOR_PURPLE;
+
+		} else if (_multicopter_throw_launch.isReadyToThrow()) {
+			led_mode = led_control_s::MODE_BLINK_FAST;
+			led_color = led_control_s::COLOR_YELLOW;
 
 		} else if (isArmed()) {
 			led_mode = led_control_s::MODE_ON;
