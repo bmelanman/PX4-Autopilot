@@ -53,6 +53,7 @@ px4_add_module(
 		factory_calibration_storage.cpp
 		gyro_calibration.cpp
 		HomePosition.cpp
+		ModeManagement.cpp
 		level_calibration.cpp
 		lm_fit.cpp
 		mag_calibration.cpp
@@ -60,6 +61,8 @@ px4_add_module(
 		Safety.cpp
 		UserModeIntention.cpp
 		worker_thread.cpp
+	MODULE_CONFIG
+		module.yaml
 	DEPENDS
 		ArmAuthorization
 		circuit_breaker
@@ -75,3 +78,4 @@ px4_add_module(
 	)
 
 px4_add_unit_gtest(SRC mag_calibration_test.cpp LINKLIBS modules__commander)
+px4_add_functional_gtest(SRC ModeManagementTest.cpp LINKLIBS modules__commander)
