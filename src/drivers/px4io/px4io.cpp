@@ -1556,6 +1556,10 @@ int PX4IO::custom_command(int argc, char *argv[])
 {
 	const char *verb = argv[0];
 
+	if (!strcmp(verb, "supported")) {
+		return 0;
+	}
+
 	if (!strcmp(verb, "checkcrc")) {
 		if (is_running()) {
 			PX4_ERR("io must be stopped");
@@ -1749,6 +1753,7 @@ Output driver communicating with the IO co-processor.
 	PRINT_MODULE_USAGE_ARG("dsm2|dsmx|dsmx8", "protocol", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("sbus1_out", "enable sbus1 out");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("sbus2_out", "enable sbus2 out");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("supported", "Returns 0 if px4io is supported");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test_fmu_fail", "test: turn off IO updates");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test_fmu_ok", "re-enable IO updates");
 
@@ -1761,7 +1766,7 @@ Output driver communicating with the IO co-processor.
 extern "C" __EXPORT int px4io_main(int argc, char *argv[])
 {
 	if (!PX4_MFT_HW_SUPPORTED(PX4_MFT_PX4IO)) {
-		PX4_ERR("PX4IO Not Supported");
+		PX4_INFO("PX4IO Not Supported");
 		return -1;
 	}
 	return PX4IO::main(argc, argv);

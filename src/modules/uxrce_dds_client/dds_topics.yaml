@@ -14,8 +14,14 @@ publications:
   - topic: /fmu/out/mode_completed
     type: px4_msgs::msg::ModeCompleted
 
+  - topic: /fmu/out/battery_status
+    type: px4_msgs::msg::BatteryStatus
+
   - topic: /fmu/out/collision_constraints
     type: px4_msgs::msg::CollisionConstraints
+
+  - topic: /fmu/out/estimator_status_flags
+    type: px4_msgs::msg::EstimatorStatusFlags
 
   - topic: /fmu/out/failsafe_flags
     type: px4_msgs::msg::FailsafeFlags
@@ -65,6 +71,7 @@ publications:
   - topic: /fmu/out/vehicle_trajectory_waypoint_desired
     type: px4_msgs::msg::VehicleTrajectoryWaypoint
 
+# Create uORB::Publication
 subscriptions:
   - topic: /fmu/in/register_ext_component_request
     type: px4_msgs::msg::RegisterExtComponentRequest
@@ -87,6 +94,9 @@ subscriptions:
   - topic: /fmu/in/config_control_setpoints
     type: px4_msgs::msg::VehicleControlMode
 
+  - topic: /fmu/in/manual_control_input
+    type: px4_msgs::msg::ManualControlSetpoint
+
   - topic: /fmu/in/offboard_control_mode
     type: px4_msgs::msg::OffboardControlMode
 
@@ -98,6 +108,9 @@ subscriptions:
 
   - topic: /fmu/in/sensor_optical_flow
     type: px4_msgs::msg::SensorOpticalFlow
+
+  - topic: /fmu/in/goto_setpoint
+    type: px4_msgs::msg::GotoSetpoint
 
   - topic: /fmu/in/telemetry_status
     type: px4_msgs::msg::TelemetryStatus
@@ -114,6 +127,9 @@ subscriptions:
   - topic: /fmu/in/vehicle_rates_setpoint
     type: px4_msgs::msg::VehicleRatesSetpoint
 
+  - topic: /fmu/in/differential_drive_setpoint
+    type: px4_msgs::msg::DifferentialDriveSetpoint
+
   - topic: /fmu/in/vehicle_visual_odometry
     type: px4_msgs::msg::VehicleOdometry
 
@@ -128,3 +144,21 @@ subscriptions:
 
   - topic: /fmu/in/vehicle_trajectory_waypoint
     type: px4_msgs::msg::VehicleTrajectoryWaypoint
+
+  - topic: /fmu/in/vehicle_thrust_setpoint
+    type: px4_msgs::msg::VehicleThrustSetpoint
+
+  - topic: /fmu/in/vehicle_torque_setpoint
+    type: px4_msgs::msg::VehicleTorqueSetpoint
+
+  - topic: /fmu/in/actuator_motors
+    type: px4_msgs::msg::ActuatorMotors
+
+  - topic: /fmu/in/actuator_servos
+    type: px4_msgs::msg::ActuatorServos
+
+  - topic: /fmu/in/aux_global_position
+    type: px4_msgs::msg::VehicleGlobalPosition
+
+# Create uORB::PublicationMulti
+subscriptions_multi:

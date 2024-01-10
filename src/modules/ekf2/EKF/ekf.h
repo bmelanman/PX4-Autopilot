@@ -62,6 +62,10 @@
 #include "aid_sources/ZeroGyroUpdate.hpp"
 #include "aid_sources/ZeroVelocityUpdate.hpp"
 
+#if defined(CONFIG_EKF2_AUX_GLOBAL_POSITION)
+# include "aux_global_position.hpp"
+#endif // CONFIG_EKF2_AUX_GLOBAL_POSITION
+
 enum class Likelihood { LOW, MEDIUM, HIGH };
 
 class Ekf final : public EstimatorInterface
@@ -80,6 +84,8 @@ public:
 
 	// initialise variables to sane values (also interface class)
 	bool init(uint64_t timestamp) override;
+
+	void print_status();
 
 	// should be called every time new data is pushed into the filter
 	bool update();
@@ -132,14 +138,12 @@ public:
 	const Vector2f &getFlowVelBody() const { return _flow_vel_body; }
 	const Vector2f &getFlowVelNE() const { return _flow_vel_ne; }
 
-	const Vector2f &getFlowCompensated() const { return _flow_compensated_XY_rad; }
-	const Vector2f &getFlowUncompensated() const { return _flow_sample_delayed.flow_xy_rad; }
+	const Vector2f &getFlowCompensated() const { return _flow_rate_compensated; }
+	const Vector2f &getFlowUncompensated() const { return _flow_sample_delayed.flow_rate; }
 
-	const Vector3f getFlowGyro() const { return _flow_sample_delayed.gyro_xyz * (1.f / _flow_sample_delayed.dt); }
-	const Vector3f &getFlowGyroIntegral() const { return _flow_sample_delayed.gyro_xyz; }
+	const Vector3f getFlowGyro() const { return _flow_sample_delayed.gyro_rate; }
 	const Vector3f &getFlowGyroBias() const { return _flow_gyro_bias; }
 	const Vector3f &getRefBodyRate() const { return _ref_body_rate; }
-	const Vector3f &getMeasuredBodyRate() const { return _measured_body_rate; }
 #endif // CONFIG_EKF2_OPTICAL_FLOW
 
 	float getHeadingInnov() const
@@ -257,7 +261,7 @@ public:
 	// get the ekf WGS-84 origin position and height and the system time it was last set
 	// return true if the origin is valid
 	bool getEkfGlobalOrigin(uint64_t &origin_time, double &latitude, double &longitude, float &origin_alt) const;
-	bool setEkfGlobalOrigin(const double latitude, const double longitude, const float altitude);
+	bool setEkfGlobalOrigin(double latitude, double longitude, float altitude, float eph = 0.f, float epv = 0.f);
 
 	// get the 1-sigma horizontal and vertical position uncertainty of the ekf WGS-84 position
 	void get_ekf_gpos_accuracy(float *ekf_eph, float *ekf_epv) const;
@@ -405,7 +409,7 @@ public:
 
 	float getYawVar() const;
 
-	uint8_t getHeightSensorRef() const { return _height_sensor_ref; }
+	HeightSensor getHeightSensorRef() const { return _height_sensor_ref; }
 
 #if defined(CONFIG_EKF2_AIRSPEED)
 	const auto &aid_src_airspeed() const { return _aid_src_airspeed; }
@@ -429,8 +433,7 @@ public:
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_GNSS)
-	// ask estimator for sensor data collection decision and do any preprocessing if required, returns true if not defined
-	bool collect_gps(const gpsMessage &gps) override;
+	void collect_gps(const gnssSample &gps);
 
 	// set minimum continuous period without GPS fail required to mark a healthy GPS status
 	void set_min_required_gps_health_time(uint32_t time_us) { _min_gps_health_time_us = time_us; }
@@ -469,7 +472,6 @@ public:
 	const auto &aid_src_aux_vel() const { return _aid_src_aux_vel; }
 #endif // CONFIG_EKF2_AUXVEL
 
-
 	bool measurementUpdate(VectorState &K, float innovation_variance, float innovation)
 	{
 		clearInhibitedStateKalmanGains(K);
@@ -499,6 +501,10 @@ public:
 
 		return is_healthy;
 	}
+
+	void updateParameters();
+
+	friend class AuxGlobalPosition;
 
 private:
 
@@ -600,14 +606,9 @@ private:
 	Vector3f _flow_gyro_bias{};	///< bias errors in optical flow sensor rate gyro outputs (rad/sec)
 	Vector2f _flow_vel_body{};	///< velocity from corrected flow measurement (body frame)(m/s)
 	Vector2f _flow_vel_ne{};		///< velocity from corrected flow measurement (local frame) (m/s)
-	Vector3f _imu_del_ang_of{};	///< bias corrected delta angle measurements accumulated across the same time frame as the optical flow rates (rad)
 	Vector3f _ref_body_rate{};
-	Vector3f _measured_body_rate{};
 
-	float _delta_time_of{0.0f};	///< time in sec that _imu_del_ang_of was accumulated over (sec)
-	uint64_t _time_bad_motion_us{0};	///< last system time that on-ground motion exceeded limits (uSec)
-	uint64_t _time_good_motion_us{0};	///< last system time that on-ground motion was within limits (uSec)
-	Vector2f _flow_compensated_XY_rad{};	///< measured delta angle of the image about the X and Y body axes after removal of body rotation (rad), RH rotation is positive
+	Vector2f _flow_rate_compensated{}; ///< measured angular rate of the image about the X and Y body axes after removal of body rotation (rad/s), RH rotation is positive
 
 	bool _flow_data_ready{false};	///< true when the leading edge of the optical flow integration period has fallen behind the fusion time horizon
 #endif // CONFIG_EKF2_OPTICAL_FLOW
@@ -636,7 +637,6 @@ private:
 #endif // CONFIG_EKF2_EXTERNAL_VISION
 
 #if defined(CONFIG_EKF2_GNSS)
-	// booleans true when fresh sensor data is available at the fusion time horizon
 	bool _gps_data_ready{false};	///< true when new GPS data has fallen behind the fusion time horizon and is available to be fused
 
 	// variables used for the GPS quality checks
@@ -879,6 +879,8 @@ private:
 #if defined(CONFIG_EKF2_OPTICAL_FLOW)
 	// control fusion of optical flow observations
 	void controlOpticalFlowFusion(const imuSample &imu_delayed);
+	void startFlowFusion();
+	void resetFlowFusion();
 	void stopFlowFusion();
 
 	void updateOnGroundMotionForOpticalFlowChecks();
@@ -888,8 +890,7 @@ private:
 	float calcOptFlowMeasVar(const flowSample &flow_sample);
 
 	// calculate optical flow body angular rate compensation
-	// returns false if bias corrected body rate data is unavailable
-	bool calcOptFlowBodyRateComp();
+	void calcOptFlowBodyRateComp(const imuSample &imu_delayed);
 
 	// fuse optical flow line of sight rate measurements
 	void updateOptFlow(estimator_aid_source2d_s &aid_src);
@@ -988,29 +989,38 @@ private:
 	// control fusion of GPS observations
 	void controlGpsFusion(const imuSample &imu_delayed);
 	void stopGpsFusion();
-
+	void updateGnssVel(const gnssSample &gnss_sample, estimator_aid_source3d_s &aid_src);
+	void updateGnssPos(const gnssSample &gnss_sample, estimator_aid_source2d_s &aid_src);
+	void controlGnssYawEstimator(estimator_aid_source3d_s &aid_src_vel);
+	bool tryYawEmergencyReset();
+	void resetVelocityToGnss(estimator_aid_source3d_s &aid_src);
+	void resetHorizontalPositionToGnss(estimator_aid_source2d_s &aid_src);
 	bool shouldResetGpsFusion() const;
 
-	// return true id the GPS quality is good enough to set an origin and start aiding
-	bool gps_is_good(const gpsMessage &gps);
+	/*
+	 * Return true if the GPS solution quality is adequate.
+	 * Checks are activated using the EKF2_GPS_CHECK bitmask parameter
+	 * Checks are adjusted using the EKF2_REQ_* parameters
+	*/
+	bool runGnssChecks(const gnssSample &gps);
 
-	void controlGnssHeightFusion(const gpsSample &gps_sample);
+	void controlGnssHeightFusion(const gnssSample &gps_sample);
 	void stopGpsHgtFusion();
 
 	void resetGpsDriftCheckFilters();
 
 # if defined(CONFIG_EKF2_GNSS_YAW)
-	void controlGpsYawFusion(const gpsSample &gps_sample, bool gps_checks_passing, bool gps_checks_failing);
+	void controlGpsYawFusion(const gnssSample &gps_sample);
 	void stopGpsYawFusion();
 
 	// fuse the yaw angle obtained from a dual antenna GPS unit
-	void fuseGpsYaw();
+	void fuseGpsYaw(float antenna_yaw_offset);
 
 	// reset the quaternions states using the yaw angle obtained from a dual antenna GPS unit
 	// return true if the reset was successful
-	bool resetYawToGps(const float gnss_yaw);
+	bool resetYawToGps(float gnss_yaw, float gnss_yaw_offset);
 
-	void updateGpsYaw(const gpsSample &gps_sample);
+	void updateGpsYaw(const gnssSample &gps_sample);
 
 # endif // CONFIG_EKF2_GNSS_YAW
 
@@ -1138,12 +1148,12 @@ private:
 	// yaw_variance : yaw error variance (rad^2)
 	void resetQuatStateYaw(float yaw, float yaw_variance);
 
-	uint8_t _height_sensor_ref{HeightSensor::UNKNOWN};
-	uint8_t _position_sensor_ref{static_cast<uint8_t>(PositionSensor::GNSS)};
+	HeightSensor _height_sensor_ref{HeightSensor::UNKNOWN};
+	PositionSensor _position_sensor_ref{PositionSensor::GNSS};
 
 #if defined(CONFIG_EKF2_EXTERNAL_VISION)
 	HeightBiasEstimator _ev_hgt_b_est{HeightSensor::EV, _height_sensor_ref};
-	PositionBiasEstimator _ev_pos_b_est{static_cast<uint8_t>(PositionSensor::EV), _position_sensor_ref};
+	PositionBiasEstimator _ev_pos_b_est{PositionSensor::EV, _position_sensor_ref};
 	AlphaFilter<Quatf> _ev_q_error_filt{0.001f};
 	bool _ev_q_error_initialized{false};
 #endif // CONFIG_EKF2_EXTERNAL_VISION
@@ -1234,6 +1244,10 @@ private:
 
 	ZeroGyroUpdate _zero_gyro_update{};
 	ZeroVelocityUpdate _zero_velocity_update{};
+
+#if defined(CONFIG_EKF2_AUX_GLOBAL_POSITION) && defined(MODULE_NAME)
+	AuxGlobalPosition _aux_global_position{};
+#endif // CONFIG_EKF2_AUX_GLOBAL_POSITION
 };
 
 #endif // !EKF_EKF_H

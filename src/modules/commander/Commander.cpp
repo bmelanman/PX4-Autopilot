@@ -376,6 +376,10 @@ int Commander::custom_command(int argc, char *argv[])
 			} else if (!strcmp(argv[1], "posctl")) {
 				send_vehicle_command(vehicle_command_s::VEHICLE_CMD_DO_SET_MODE, 1, PX4_CUSTOM_MAIN_MODE_POSCTL);
 
+			} else if (!strcmp(argv[1], "position:slow")) {
+				send_vehicle_command(vehicle_command_s::VEHICLE_CMD_DO_SET_MODE, 1, PX4_CUSTOM_MAIN_MODE_POSCTL,
+						     PX4_CUSTOM_SUB_MODE_POSCTL_SLOW);
+
 			} else if (!strcmp(argv[1], "auto:mission")) {
 				send_vehicle_command(vehicle_command_s::VEHICLE_CMD_DO_SET_MODE, 1, PX4_CUSTOM_MAIN_MODE_AUTO,
 						     PX4_CUSTOM_SUB_MODE_AUTO_MISSION);
@@ -631,7 +635,7 @@ transition_result_t Commander::disarm(arm_disarm_reason_t calling_reason, bool f
 					     || (calling_reason == arm_disarm_reason_t::rc_switch)
 					     || (calling_reason == arm_disarm_reason_t::rc_button);
 
-		if (!landed && !(mc_manual_thrust_mode && commanded_by_rc)) {
+		if (!landed && !(mc_manual_thrust_mode && commanded_by_rc && _param_com_disarm_man.get())) {
 			if (calling_reason != arm_disarm_reason_t::rc_stick) {
 				mavlink_log_critical(&_mavlink_log_pub, "Disarming denied: not landed\t");
 				events::send(events::ID("commander_disarm_denied_not_landed"),
@@ -780,7 +784,16 @@ Commander::handle_command(const vehicle_command_s &cmd)
 					desired_nav_state = vehicle_status_s::NAVIGATION_STATE_ALTCTL;
 
 				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_POSCTL) {
-					desired_nav_state = vehicle_status_s::NAVIGATION_STATE_POSCTL;
+					switch (custom_sub_mode) {
+					default:
+					case PX4_CUSTOM_SUB_MODE_POSCTL_POSCTL:
+						desired_nav_state = vehicle_status_s::NAVIGATION_STATE_POSCTL;
+						break;
+
+					case PX4_CUSTOM_SUB_MODE_POSCTL_SLOW:
+						desired_nav_state = vehicle_status_s::NAVIGATION_STATE_POSITION_SLOW;
+						break;
+					}
 
 				} else if (custom_main_mode == PX4_CUSTOM_MAIN_MODE_AUTO) {
 					if (custom_sub_mode > 0) {
@@ -1188,7 +1201,7 @@ Commander::handle_command(const vehicle_command_s &cmd)
 
 #if defined(CONFIG_BOARDCTL_RESET)
 
-			} else if ((param1 == 1) && !isArmed() && (px4_reboot_request(false, 400_ms) == 0)) {
+			} else if ((param1 == 1) && !isArmed() && (px4_reboot_request(REBOOT_REQUEST, 400_ms) == 0)) {
 				// 1: Reboot autopilot
 				answer_command(cmd, vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED);
 
@@ -1208,7 +1221,7 @@ Commander::handle_command(const vehicle_command_s &cmd)
 
 #if defined(CONFIG_BOARDCTL_RESET)
 
-			} else if ((param1 == 3) && !isArmed() && (px4_reboot_request(true, 400_ms) == 0)) {
+			} else if ((param1 == 3) && !isArmed() && (px4_reboot_request(REBOOT_TO_BOOTLOADER, 400_ms) == 0)) {
 				// 3: Reboot autopilot and keep it in the bootloader until upgraded.
 				answer_command(cmd, vehicle_command_ack_s::VEHICLE_CMD_RESULT_ACCEPTED);
 
@@ -1615,9 +1628,9 @@ void Commander::executeActionRequest(const action_request_s &action_request)
 		break;
 
 	case action_request_s::ACTION_UNKILL:
-		if (arm_disarm_reason == arm_disarm_reason_t::rc_switch && _actuator_armed.manual_lockdown) {
-			mavlink_log_info(&_mavlink_log_pub, "Kill-switch disengaged\t");
-			events::send(events::ID("commander_kill_sw_disengaged"), events::Log::Info, "Kill-switch disengaged");
+		if (_actuator_armed.manual_lockdown) {
+			mavlink_log_info(&_mavlink_log_pub, "Kill disengaged\t");
+			events::send(events::ID("commander_kill_sw_disengaged"), events::Log::Info, "Kill disengaged");
 			_status_changed = true;
 			_actuator_armed.manual_lockdown = false;
 		}
@@ -1625,8 +1638,8 @@ void Commander::executeActionRequest(const action_request_s &action_request)
 		break;
 
 	case action_request_s::ACTION_KILL:
-		if (arm_disarm_reason == arm_disarm_reason_t::rc_switch && !_actuator_armed.manual_lockdown) {
-			const char kill_switch_string[] = "Kill-switch engaged\t";
+		if (!_actuator_armed.manual_lockdown) {
+			const char kill_switch_string[] = "Kill engaged\t";
 			events::LogLevels log_levels{events::Log::Info};
 
 			if (_vehicle_land_detected.landed) {
@@ -1637,7 +1650,7 @@ void Commander::executeActionRequest(const action_request_s &action_request)
 				log_levels.external = events::Log::Critical;
 			}
 
-			events::send(events::ID("commander_kill_sw_engaged"), log_levels, "Kill-switch engaged");
+			events::send(events::ID("commander_kill_sw_engaged"), log_levels, "Kill engaged");
 
 			_status_changed = true;
 			_actuator_armed.manual_lockdown = true;
@@ -1935,19 +1948,19 @@ void Commander::checkForMissionUpdate()
 	if (_mission_result_sub.updated()) {
 		const mission_result_s &mission_result = _mission_result_sub.get();
 
-		const auto prev_mission_instance_count = mission_result.instance_count;
+		const auto prev_mission_mission_id = mission_result.mission_id;
 		_mission_result_sub.update();
 
 		// if mission_result is valid for the current mission
 		const bool mission_result_ok = (mission_result.timestamp > _boot_timestamp)
-					       && (mission_result.instance_count > 0);
+					       && (mission_result.mission_id > 0);
 
 		bool auto_mission_available = mission_result_ok && mission_result.valid;
 
 		if (mission_result_ok) {
 			/* Only evaluate mission state if home is set */
 			if (!_failsafe_flags.home_position_invalid &&
-			    (prev_mission_instance_count != mission_result.instance_count)) {
+			    (prev_mission_mission_id != mission_result.mission_id)) {
 
 				if (!auto_mission_available) {
 					/* the mission is invalid */
@@ -2969,7 +2982,7 @@ The commander module contains the state machine for mode switching and failsafe 
 	PRINT_MODULE_USAGE_COMMAND("land");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("transition", "VTOL transition");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("mode", "Change flight mode");
-	PRINT_MODULE_USAGE_ARG("manual|acro|offboard|stabilized|altctl|posctl|auto:mission|auto:loiter|auto:rtl|auto:takeoff|auto:land|auto:precland|ext1",
+	PRINT_MODULE_USAGE_ARG("manual|acro|offboard|stabilized|altctl|posctl|position:slow|auto:mission|auto:loiter|auto:rtl|auto:takeoff|auto:land|auto:precland|ext1",
 			"Flight mode", false);
 	PRINT_MODULE_USAGE_COMMAND("pair");
 	PRINT_MODULE_USAGE_COMMAND("lockdown");

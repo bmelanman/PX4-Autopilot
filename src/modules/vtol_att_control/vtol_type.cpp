@@ -45,6 +45,7 @@
 #include <float.h>
 #include <px4_platform_common/defines.h>
 #include <matrix/math.hpp>
+#include <lib/atmosphere/atmosphere.h>
 
 using namespace matrix;
 
@@ -207,7 +208,7 @@ bool VtolType::isFrontTransitionCompletedBase()
 {
 	// continue the transition to fw mode while monitoring airspeed for a final switch to fw mode
 	const bool airspeed_triggers_transition = PX4_ISFINITE(_airspeed_validated->calibrated_airspeed_m_s)
-			&& !_param_fw_arsp_mode.get();
+			&& _param_fw_use_airspd.get();
 	const bool minimum_trans_time_elapsed = _time_since_trans_start > getMinimumFrontTransitionTime();
 	const bool openloop_trans_time_elapsed = _time_since_trans_start > getOpenLoopFrontTransitionTime();
 
@@ -309,6 +310,15 @@ bool VtolType::isFrontTransitionAltitudeLoss()
 	}
 
 	return result;
+}
+
+void VtolType::handleEkfResets()
+{
+	// check if there is a reset in the z-direction, and if so, shift the transition start z as well
+	if (_local_pos->z_reset_counter != _altitude_reset_counter) {
+		_local_position_z_start_of_transition += _local_pos->delta_z;
+		_altitude_reset_counter = _local_pos->z_reset_counter;
+	}
 }
 
 bool VtolType::isPitchExceeded()
@@ -565,7 +575,7 @@ float VtolType::getFrontTransitionTimeFactor() const
 	const float rho = math::constrain(_attc->getAirDensity(), 0.7f, 1.5f);
 
 	if (PX4_ISFINITE(rho)) {
-		float rho0_over_rho = CONSTANTS_AIR_DENSITY_SEA_LEVEL_15C / rho;
+		float rho0_over_rho = atmosphere::kAirDensitySeaLevelStandardAtmos / rho;
 		return sqrtf(rho0_over_rho) * rho0_over_rho;
 	}
 
