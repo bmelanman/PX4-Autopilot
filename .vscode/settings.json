@@ -13,7 +13,7 @@
 	"C_Cpp.workspaceParsingPriority": "low",
 	"cmake.buildBeforeRun": true,
 	"cmake.buildDirectory": "${workspaceFolder}/build/${variant:CONFIG}",
-	"cmake.configureOnOpen": true,
+	"cmake.configureOnOpen": false,
 	"cmake.ctest.parallelJobs": 1,
 	"cmake.skipConfigureIfCachePresent": true,
 	"cmakeExplorer.buildDir": "${workspaceFolder}/build/px4_sitl_test",
