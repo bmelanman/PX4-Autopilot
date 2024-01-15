@@ -1,21 +1,6 @@
 {
     "version": "0.2.0",
     "configurations": [
-
-	{
-		"cwd": "${workspaceRoot}",
-		"executable": "/mnt/c/Users/mprov/Desktop/open-gimbal/PX4-Autopilot/build/px4_fmu-v6c_default/px4_fmu-v6c_default.elf",
-		"name": "Debug with OpenOCD",
-		"request": "attach",
-		"type": "cortex-debug",
-		"servertype": "external",
-		"gdbTarget": "127.0.0.1:3333",
-		"configFiles": ["/usr/local/share/openocd/scripts/interface/stlink.cfg",
-				"/usr/local/share/openocd/scripts/target/stm32h7x.cfg"],
-		"searchDir": [],
-		"runToEntryPoint": "main",
-		"showDevDebugOutput": "none"
-	},
         {
             "name": "jlink (px4_fmu-v6c)",
             "gdbPath": "/opt/gcc-arm-none-eabi-10-2020-q4-major/bin/arm-none-eabi-gdb",
@@ -40,7 +25,7 @@
         },
         {
             "name": "stlink (px4_fmu-v6c)",
-            "gdbPath": "/usr/bin/arm-none-eabi-gdb",
+            "gdbPath": "/opt/gcc-arm-none-eabi-10-2020-q4-major/bin/arm-none-eabi-gdb",
             "device": "STM32H743VI",
             "svdFile": "",
             "executable": "${command:cmake.launchTargetPath}",
@@ -57,19 +42,15 @@
                 "set print pretty",
             ]
         },
-	{
-		"name": "GDB",
-		"type": "gdb",
-		"request": "launch",
-		"cwd": "${workspaceRoot}",
-		"target": "${workspaceRoot}/.pioenvs/nucleo_f303k8/firmware.elf",
-		"gdbpath" : "C:/STM32Toolchain/gcc-arm/5.4 2016q3/bin/arm-none-eabi-gdb.exe",
-		"autorun": [
-		"target remote localhost:3333",
-		"symbol-file ./.pioenvs/nucleo_f303k8/firmware.elf",
-		"monitor reset"
-        ]
-	},
+        {
+            "name": "openocd",
+            "gdbPath": "/opt/gcc-arm-none-eabi-10-2020-q4-major/bin/arm-none-eabi-gdb",
+            "executable": "/mnt/c/Users/mprov/Desktop/open-gimbal/PX4-Autopilot/build/px4_fmu-v6c_default/px4_fmu-v6c_default.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "external",
+            "gdbTarget": "127.0.0.1:3333"
+        },
         {
             "name": "blackmagic (px4_fmu-v6c)",
             "gdbPath": "/opt/gcc-arm-none-eabi-10-2020-q4-major/bin/arm-none-eabi-gdb",
