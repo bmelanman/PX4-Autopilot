@@ -39,7 +39,7 @@
 #include <px4_platform_common/module_params.h>
 
 #include <uORB/Publication.hpp>
-#include <uORB/topics/vehicle_attitude_setpoint.h>
+#include <uORB/topics/mount_orientation.h>
 
 #include <uORB/SubscriptionCallback.hpp>
 #include <uORB/SubscriptionInterval.hpp>
@@ -72,7 +72,7 @@ public:
 private:
 	int update_params(bool force = false);
 
-	static int publish_attitude_setpoint(vehicle_attitude_setpoint_s &att_sp);
+	static int publish(void);
 
 	static int open_gimbal_thread_main(int argc, char *argv[]);
 

@@ -10,4 +10,3 @@ px4_add_module(
 	SRCS
 		open_gimbal.cpp
 	)
-

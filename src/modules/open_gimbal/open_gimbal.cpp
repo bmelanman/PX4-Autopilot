@@ -37,6 +37,8 @@
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/posix.h>
 
+#include "output.h"
+
 #define MOTOR_COUNT 3
 #define MOTOR_PITCH (actuator_motors_s::ACTUATOR_FUNCTION_MOTOR1)
 #define MOTOR_ROLL  (MOTOR_PITCH + 1)
@@ -54,18 +56,17 @@ struct ThreadData {
 	int pitch;
 	int roll;
 	int yaw;
+	OutputBase *output_obj = nullptr;
 };
 
 static ThreadData *g_thread_data = nullptr;
 
 // Subscriptions
-uORB::SubscriptionInterval 	_parameter_update_sub		{ORB_ID(parameter_update), 1_s};
+uORB::SubscriptionInterval 	_parameter_update_sub           {ORB_ID(parameter_update), 1_s};
 uORB::SubscriptionInterval	_vehicle_angular_velocity_sub	{ORB_ID(vehicle_angular_velocity)};
 
 // Publications
-uORB::Publication <vehicle_attitude_setpoint_s> _vehicle_attitude_setpoint_pub	{ORB_ID(vehicle_attitude_setpoint)};
-
-extern "C" __EXPORT int open_gimbal_main(int argc, char *argv[]);
+uORB::Publication<mount_orientation_s> _mount_orientation_pub{ORB_ID(mount_orientation)};
 
 namespace open_gimbal
 {
@@ -87,14 +88,6 @@ int OpenGimbal::update_params(bool force)
 		// update parameters from storage
 		ModuleParams::updateParams();
 	}
-
-	return 0;
-}
-
-int OpenGimbal::publish_attitude_setpoint(vehicle_attitude_setpoint_s &att_sp)
-{
-	att_sp.timestamp = hrt_absolute_time();
-	_vehicle_attitude_setpoint_pub.publish(att_sp);
 
 	return 0;
 }
