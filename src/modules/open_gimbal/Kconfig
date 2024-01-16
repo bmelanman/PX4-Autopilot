@@ -1,0 +1,12 @@
+menuconfig MODULES_OPEN_GIMBAL
+	bool "open_gimbal"
+	default y
+	---help---
+		Enable support for OPEN_GIMBAL
+
+menuconfig USER_OPEN_GIMBAL
+	bool "open_gimbal running as userspace module"
+	default y
+	depends on BOARD_PROTECTED && MODULES_OPEN_GIMBAL
+	---help---
+		Put open_gimbal in userspace memory
