@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2018 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2013-2023 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,388 +31,521 @@
  *
  ****************************************************************************/
 
-#include "open_gimbal.h"
+// TODO:
+// :- Enable DEBUG_APPLICATION_INPLACE
+// :- Follow up on motors?
 
-#include <px4_platform_common/getopt.h>
-#include <px4_platform_common/log.h>
-#include <px4_platform_common/posix.h>
+#include <cstdint>
+#include <stdlib.h>
+#include <string.h>
+#include <px4_platform_common/defines.h>
+#include <px4_platform_common/tasks.h>
 
-#include "output.h"
+// Parameters
+#include "gimbal_params.h"
 
-#define MOTOR_COUNT 3
-#define MOTOR_PITCH (actuator_motors_s::ACTUATOR_FUNCTION_MOTOR1)
-#define MOTOR_ROLL  (MOTOR_PITCH + 1)
-#define MOTOR_YAW   (MOTOR_PITCH + 2)
+// Inputs
+#include "input_rc.h"
+#include "input_test.h"
 
-#define SLEEP_TIME_US 200000
+// Outputs
+#include "output_rc.h"
 
-static uint64_t system_start_time = hrt_absolute_time();
+// Subscriptions
+#include <uORB/Subscription.hpp>
+#include <uORB/SubscriptionInterval.hpp>
+#include <uORB/topics/parameter_update.h>
+
+#include <px4_platform_common/module.h>
+#include <px4_platform_common/atomic.h>
+
+using namespace time_literals;
+using namespace open_gimbal;
 
 static px4::atomic<bool> thread_should_exit {false};
 static px4::atomic<bool> thread_running {false};
 
+static constexpr int input_objs_len_max = 3;
+
 struct ThreadData {
-	bool new_data;
-	int pitch;
-	int roll;
-	int yaw;
+	InputBase *input_objs[input_objs_len_max] = {nullptr, nullptr, nullptr};
+	int input_objs_len = 0;
+	int last_input_active = -1;
 	OutputBase *output_obj = nullptr;
+	InputTest *test_input = nullptr;
+	ControlData control_data {};
 };
 
 static ThreadData *g_thread_data = nullptr;
 
-// Subscriptions
-uORB::SubscriptionInterval 	_parameter_update_sub           {ORB_ID(parameter_update), 1_s};
-uORB::SubscriptionInterval	_vehicle_angular_velocity_sub	{ORB_ID(vehicle_angular_velocity)};
+static void usage();
+static void update_params(ParameterHandles &param_handles, Parameters &params);
+static bool initialize_params(ParameterHandles &param_handles, Parameters &params);
 
-// Publications
-uORB::Publication<mount_orientation_s> _mount_orientation_pub{ORB_ID(mount_orientation)};
+static int open_gimbal_thread_main(int argc, char *argv[]);
+extern "C" __EXPORT int open_gimbal_main(int argc, char *argv[]);
 
-namespace open_gimbal
+static int open_gimbal_thread_main(int argc, char *argv[])
 {
+	ParameterHandles param_handles;
+	Parameters params {};
+	ThreadData thread_data;
 
-OpenGimbal::~OpenGimbal() {};
+	if (!initialize_params(param_handles, params)) {
+		px4_sleep(1);
 
-OpenGimbal::OpenGimbal(int pitch, int roll, int yaw) : ModuleParams(nullptr)
-{
-}
+		PX4_ERR("could not get mount parameters!");
+		//delete g_thread_data->test_input;
 
-int OpenGimbal::update_params(bool force)
-{
-	// check for parameter updates
-	if (_parameter_update_sub.updated() || force) {
-		// clear update
-		parameter_update_s update;
-		_parameter_update_sub.copy(&update);
-
-		// update parameters from storage
-		ModuleParams::updateParams();
+		return PX4_ERROR;
 	}
 
-	return 0;
-}
-
-int OpenGimbal::open_gimbal_thread_main(int argc, char *argv[])
-{
-	vehicle_attitude_setpoint_s att_sp = {};
-
+	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	thread_running.store(true);
+	g_thread_data = &thread_data;
 
-	//update_params(true);
+	thread_data.test_input = new InputTest(params);
 
-	g_thread_data->new_data = true;
+	// Initialize input object(s)
+	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
+	thread_data.input_objs[thread_data.input_objs_len++] = new InputRC(params);
+
+	for (int i = 0; i < thread_data.input_objs_len; ++i) {
+		if (!thread_data.input_objs[i]) {
+			PX4_ERR("input objs memory allocation failed");
+			thread_should_exit.store(true);
+
+			break;
+		}
+	}
+
+	if (!thread_should_exit.load()) {
+		for (int i = 0; i < thread_data.input_objs_len; ++i) {
+			if (thread_data.input_objs[i]->initialize() != 0) {
+				PX4_ERR("Input %d failed", i);
+				thread_should_exit.store(true);
+
+				break;
+			}
+		}
+	}
+
+	// Initialize output object(s)
+	thread_data.output_obj = new OutputRC(params);
+
+	if (!thread_data.output_obj) {
+		PX4_ERR("output memory allocation failed");
+		thread_should_exit.store(true);
+	}
 
 	while (!thread_should_exit.load()) {
 
-		if (g_thread_data->new_data) {
+		const bool updated = parameter_update_sub.updated();
 
-			att_sp.roll_body = g_thread_data->roll * M_DEG_TO_RAD_F;
-			att_sp.pitch_body = g_thread_data->pitch * M_DEG_TO_RAD_F;
-			att_sp.yaw_body = g_thread_data->yaw * M_DEG_TO_RAD_F;
-
-			att_sp.reset_integral = true;
-
-			g_thread_data->new_data = false;
-
-			publish_attitude_setpoint(att_sp);
+		if (updated) {
+			parameter_update_s pupdate;
+			parameter_update_sub.copy(&pupdate);
+			update_params(param_handles, params);
 		}
 
-		//update_params();
+		if (thread_data.last_input_active == -1) {
+			// Reset control as no one is active anymore, or yet.
+			//thread_data.control_data.sysid_primary_control = 0;
+			//thread_data.control_data.compid_primary_control = 0;
+			thread_data.control_data.device_compid = 0;
+		}
 
-		usleep(SLEEP_TIME_US);
+		InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
+
+		if (thread_data.input_objs_len > 0) {
+
+			// get input: we cannot make the timeout too large, because the output needs to update
+			// periodically for stabilization and angle updates.
+
+			for (int i = 0; i < thread_data.input_objs_len; ++i) {
+
+				const bool already_active = (thread_data.last_input_active == i);
+				// poll only on active input to reduce latency, or on all if none is active
+				const unsigned int poll_timeout =
+					(already_active || thread_data.last_input_active == -1) ? 20 : 0;
+
+				update_result = thread_data.input_objs[i]->update(poll_timeout, thread_data.control_data, already_active);
+
+				bool break_loop = false;
+
+				switch (update_result) {
+				case InputBase::UpdateResult::NoUpdate:
+					if (already_active) {
+						// No longer active.
+						thread_data.last_input_active = -1;
+					}
+
+					break;
+
+				case InputBase::UpdateResult::UpdatedActive:
+					thread_data.last_input_active = i;
+					break_loop = true;
+					break;
+
+				case InputBase::UpdateResult::UpdatedActiveOnce:
+					thread_data.last_input_active = -1;
+					break_loop = true;
+					break;
+
+				case InputBase::UpdateResult::UpdatedNotActive:
+					// Ignore, input not active
+					break;
+				}
+
+				if (break_loop) {
+					break;
+				}
+			}
+
+			if (params.mnt_do_stab == 1) {
+				thread_data.output_obj->set_stabilize(true, true, true);
+
+			} else if (params.mnt_do_stab == 2) {
+				thread_data.output_obj->set_stabilize(false, false, true);
+
+			} else {
+				thread_data.output_obj->set_stabilize(false, false, false);
+			}
+
+			// Update output
+			thread_data.output_obj->update(
+				thread_data.control_data,
+				update_result != InputBase::UpdateResult::NoUpdate, thread_data.control_data.device_compid);
+
+			// Publish the mount orientation
+			thread_data.output_obj->publish();
+
+		} else {
+			// We still need to wake up regularly to check for thread exit requests
+			px4_usleep(1e6);
+		}
+	}
+
+	g_thread_data = nullptr;
+
+	for (int i = 0; i < input_objs_len_max; ++i) {
+		if (thread_data.input_objs[i]) {
+			delete (thread_data.input_objs[i]);
+			thread_data.input_objs[i] = nullptr;
+		}
+	}
+
+	thread_data.input_objs_len = 0;
+
+	if (thread_data.output_obj) {
+		delete (thread_data.output_obj);
+		thread_data.output_obj = nullptr;
 	}
 
 	thread_running.store(false);
+	return PX4_OK;
+}
+
+int start(void)
+{
+	if (thread_running.load()) {
+		PX4_WARN("mount driver already running");
+		return PX4_ERROR;
+	}
+
+	PX4_DEBUG("starting");
+	PX4_INFO("starting");
+
+	thread_should_exit.store(false);
+
+	// start the task
+	int open_gimbal_task = px4_task_spawn_cmd(
+				       "open_gimbal",
+				       SCHED_DEFAULT,
+				       SCHED_PRIORITY_DEFAULT,
+				       2000,
+				       (px4_main_t)&open_gimbal_thread_main,
+				       (char *const *)nullptr);
+
+	if (open_gimbal_task < 0) {
+		PX4_ERR("failed to start");
+		return PX4_ERROR;
+	}
+
+	int counter = 0;
+
+	while (!thread_running.load()) {
+		px4_usleep(5000);
+
+		if (++counter >= 100) {
+			PX4_ERR("timed out waiting for task to start");
+			return PX4_ERROR;
+		}
+	}
+
+	if (thread_should_exit.load()) {
+		PX4_ERR("task exited during startup");
+		return PX4_ERROR;
+	}
 
 	return PX4_OK;
 }
 
-int OpenGimbal::start(void)
-{
-	if (thread_running.load()) {
-		PX4_WARN("already running");
-		return PX4_ERROR;
-	}
-
-	thread_should_exit.store(false);
-	int ret = PX4_OK;
-
-	g_thread_data = new ThreadData();
-	g_thread_data->new_data = false;
-	g_thread_data->pitch = 0;
-	g_thread_data->roll = 0;
-	g_thread_data->yaw = 0;
-
-	// start the task
-	int g_task = px4_task_spawn_cmd("open_gimbal",
-					SCHED_DEFAULT,
-					SCHED_PRIORITY_DEFAULT,
-					2000,
-					(px4_main_t)&open_gimbal_thread_main,
-					(char *const *)nullptr);
-
-	if (g_task < 0) {
-		PX4_ERR("task start failed");
-		return -errno;
-	}
-
-	thread_running.store(true);
-	return ret;
-}
-
-int OpenGimbal::stop(void)
+int stop(void)
 {
 	if (!thread_running.load()) {
-		PX4_WARN("not running");
-		return PX4_ERROR;
+		PX4_WARN("mount driver not running");
+		return PX4_OK;
 	}
 
 	thread_should_exit.store(true);
-	int timeout_cnt = 1000;
+
+	int counter = 0;
 
 	while (thread_running.load()) {
-		usleep(200000);
+		px4_usleep(100000);
 
-		if (--timeout_cnt <= 0) {
-			PX4_WARN("failed to stop");
+		if (++counter >= 5) {
+			PX4_ERR("timed out waiting for task to stop");
 			return PX4_ERROR;
 		}
 	}
 
-	delete g_thread_data;
-	g_thread_data = nullptr;
-
 	return PX4_OK;
 }
 
-int OpenGimbal::status(void)
+int status(void)
 {
-	// -- EXAMPLE OUTPUTS --
-	// Active: true
-	// Angles (deg):
-	//   Pitch: 90
-	//   Roll:  180
-	//   Yaw:   270
-	// -- OR ---------------
-	// Active: false
-	// ---------------------
+	if (thread_running.load() && g_thread_data && g_thread_data->test_input) {
 
-	if (thread_running.load()) {
-		PX4_INFO("Angles (deg):");
-		PX4_INFO("  Pitch: %d", g_thread_data->pitch);
-		PX4_INFO("  Roll:  %d", g_thread_data->roll);
-		PX4_INFO("  Yaw:   %d", g_thread_data->yaw);
+		if (g_thread_data->input_objs_len == 0) {
+			PX4_INFO("Input: None");
 
-		return PX4_OK;
-	}
+		} else {
+			PX4_INFO("Input Selected");
 
-	PX4_INFO("not running");
+			for (int i = 0; i < g_thread_data->input_objs_len; ++i) {
+				if (i == g_thread_data->last_input_active) {
+					g_thread_data->input_objs[i]->print_status();
+				}
+			}
 
-	return PX4_ERROR;
-}
+			PX4_INFO("Input not selected");
 
-int OpenGimbal::load_thread_data(int pitch, int roll, int yaw)
-{
+			for (int i = 0; i < g_thread_data->input_objs_len; ++i) {
+				if (i != g_thread_data->last_input_active) {
+					g_thread_data->input_objs[i]->print_status();
+				}
+			}
 
-	// Wait for the thread to be ready
-	int timeout_cnt = 10;
+			PX4_INFO("Primary control:   %d/%d", 0, 0);
+			// g_thread_data->control_data.sysid_primary_control, g_thread_data->control_data.compid_primary_control);
 
-	while (g_thread_data->new_data) {
-
-		if (--timeout_cnt <= 0) {
-			PX4_ERR("failed to load thread data!");
-			return PX4_ERROR;
 		}
 
-		usleep(SLEEP_TIME_US);
+		if (g_thread_data->output_obj) {
+			g_thread_data->output_obj->print_status();
+
+		} else {
+			PX4_INFO("Output: None");
+		}
+
+	} else {
+		PX4_INFO("not running");
 	}
-
-	bool new_data = false;
-
-	if (pitch != -1 && pitch != g_thread_data->pitch) {
-		g_thread_data->pitch = pitch;
-		new_data = true;
-	}
-
-	if (roll != -1 && roll != g_thread_data->roll) {
-		g_thread_data->roll = roll;
-		new_data = true;
-	}
-
-	if (yaw != -1 && yaw != g_thread_data->yaw) {
-		g_thread_data->yaw = yaw;
-		new_data = true;
-	}
-
-	if (!new_data) {
-		return PX4_OK;
-	}
-
-	g_thread_data->new_data = true;
 
 	return PX4_OK;
 }
 
-int OpenGimbal::move(int argc, char *argv[])
+int test(int argc, char *argv[])
 {
-	if (argc < 4) {
-		PX4_ERR("missing arguments");
+	if (!thread_running.load()) {
+		PX4_WARN("not running");
 		usage();
 		return PX4_ERROR;
 	}
 
-	if (!thread_running.load()) {
-		return PX4_ERROR;
-	}
+	if (g_thread_data && g_thread_data->test_input) {
 
-	int pitch = -1, roll = -1, yaw = -1;
-	bool err = false;
+		if (argc >= 4) {
 
-	int ch;
-	int myoptind = 1;
-	const char *myoptarg = nullptr;
+			bool found_axis = false;
+			const char *axis_names[3] = {"roll", "pitch", "yaw"};
+			int angles[3] = { 0, 0, 0 };
 
-	while ((ch = px4_getopt(argc, argv, "p:r:y:", &myoptind, &myoptarg)) != EOF) {
-		switch (ch) {
-		case 'p':
-			pitch = strtol(myoptarg, nullptr, 10);
+			for (int arg_i = 2 ; arg_i < (argc - 1); ++arg_i) {
 
-			if (pitch < 0 || pitch > 360) {
-				PX4_ERR("invalid pitch angle!");
-				err = true;
+				for (int axis_i = 0; axis_i < 3; ++axis_i) {
+
+					if (!strcmp(argv[arg_i], axis_names[axis_i])) {
+
+						int angle_deg = (int)strtol(argv[arg_i + 1], nullptr, 0);
+						angles[axis_i] = angle_deg;
+						found_axis = true;
+					}
+				}
 			}
 
-			break;
-
-		case 'r':
-			roll = strtol(myoptarg, nullptr, 10);
-
-			if (roll < 0 || roll > 360) {
-				PX4_ERR("invalid roll angle!");
-				err = true;
+			if (!found_axis) {
+				usage();
+				return PX4_ERROR;
 			}
 
-			break;
+			g_thread_data->test_input->set_test_input(angles[0], angles[1], angles[2]);
 
-		case 'y':
-			yaw = strtol(myoptarg, nullptr, 10);
-
-			if (yaw < 0 || yaw > 360) {
-				PX4_ERR("invalid yaw angle!");
-				err = true;
-			}
-
-			break;
-
-		default:
-			PX4_ERR("unrecognized argument");
+		} else {
+			PX4_ERR("not enough arguments");
 			usage();
 			return PX4_ERROR;
 		}
+
+	} else {
+		PX4_ERR("test input not available???");
+		return PX4_ERROR;
 	}
 
-	if (pitch == -1 && roll == -1 && yaw == -1) {
-		PX4_ERR("no angles given");
-		err = true;
-	}
+	return PX4_OK;
+}
 
-	if (err != false) {
+int primary_control(int argc, char *argv[])
+{
+	if (thread_running.load() && g_thread_data && g_thread_data->test_input) {
+
+		if (argc == 4) {
+			//g_thread_data->control_data.sysid_primary_control = (uint8_t)strtol(argv[2], nullptr, 0);
+			//g_thread_data->control_data.compid_primary_control = (uint8_t)strtol(argv[3], nullptr, 0);
+
+			PX4_INFO("Control set to: %d/%d", 0, 0);
+			// g_thread_data->control_data.sysid_primary_control,
+			// g_thread_data->control_data.compid_primary_control);
+
+			return PX4_OK;
+
+		} else {
+			PX4_ERR("not enough arguments");
+			usage();
+			return PX4_ERROR;
+		}
+
+	} else {
+		PX4_WARN("not running");
 		usage();
 		return PX4_ERROR;
 	}
-
-	return load_thread_data(pitch, roll, yaw);
-}
-
-int OpenGimbal::reset(void)
-{
-	if (!thread_running.load()) {
-		return PX4_ERROR;
-	}
-
-	return load_thread_data(0, 0, 0);
-}
-
-int OpenGimbal::usage(const char *reason)
-{
-	if (reason) {
-		PX4_WARN("%s\n", reason);
-	}
-
-	PRINT_MODULE_DESCRIPTION(
-		R"DESCR_STR(
-### Description
-Move each motor of the gimbal to the given angle in degrees.
-
-### Examples
-CLI usage example:
-$ open_gimbal start
-$ open_gimbal move -p 90 -r 180 -y 270
-$ open_gimbal status
-Active: true
-Angles (deg):
-  Pitch: 90
-  Roll:  180
-  Yaw:   270
-$ open_gimbal reset
-$ open_gimbal status
-Active: true
-Angles (deg):
-  Pitch: 0
-  Roll:  0
-  Yaw:   0
-$ open_gimbal stop
-$ open_gimbal status
-Active: false
-
-)DESCR_STR");
-
-	PRINT_MODULE_USAGE_NAME("module", "open_gimbal");
-	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
-	PRINT_MODULE_USAGE_COMMAND_DESCR("move", "Move each motor of the gimbal to the given angle in degrees (-360 to 360)");
-	PRINT_MODULE_USAGE_PARAM_INT('p', 0, -360, 360, "Move the pitch motor", true);
-	PRINT_MODULE_USAGE_PARAM_INT('r', 0, -360, 360, "Move the roll motor", true);
-	PRINT_MODULE_USAGE_PARAM_INT('y', 0, -360, 360, "Move the yaw motor", true);
-	PRINT_MODULE_USAGE_COMMAND_DESCR("reset", "Reset the gimbal to the default position (0, 0, 0)");
-
-	return PX4_OK;
 }
 
 int open_gimbal_main(int argc, char *argv[])
 {
-	if (argc < 2 ||
-	    strcmp(argv[1], "-h")    == 0 ||
-	    strcmp(argv[1], "help")  == 0 ||
-	    strcmp(argv[1], "info")  == 0 ||
-	    strcmp(argv[1], "usage") == 0) {
-		OpenGimbal::usage();
-		return PX4_OK;
+	if (argc < 2) {
+		PX4_ERR("missing command");
+		usage();
+		return PX4_ERROR;
 	}
 
 	if (!strcmp(argv[1], "start")) {
-		return OpenGimbal::start();
-	}
+		return start();
 
-	if (!strcmp(argv[1], "stop")) {
-		return OpenGimbal::stop();
-	}
+	} else if (!strcmp(argv[1], "stop")) {
+		return stop();
 
-	if (!strcmp(argv[1], "status")) {
-		return OpenGimbal::status();
-	}
+	} else if (!strcmp(argv[1], "status")) {
+		return status();
 
-	if (!strcmp(argv[1], "move")) {
-		return OpenGimbal::move(argc, argv);
-	}
+	} else if (!strcmp(argv[1], "test")) {
+		return test(argc, argv);
 
-	if (!strcmp(argv[1], "reset")) {
-		return OpenGimbal::reset();
+	} else if (!strcmp(argv[1], "primary-control")) {
+		return primary_control(argc, argv);
+
 	}
 
 	PX4_ERR("unrecognized command");
-	OpenGimbal::usage();
+	usage();
 	return PX4_ERROR;
 }
 
-} /* namespace open_gimbal */
+#define UPDATE_PARAM(handle, param) param_get(handle, &(param))
+
+void update_params(ParameterHandles &param_handles, Parameters &params)
+{
+	param_get(param_handles.mnt_man_pitch, &params.mnt_man_pitch);
+	param_get(param_handles.mnt_man_roll, &params.mnt_man_roll);
+	param_get(param_handles.mnt_man_yaw, &params.mnt_man_yaw);
+	param_get(param_handles.mnt_do_stab, &params.mnt_do_stab);
+	param_get(param_handles.mnt_range_pitch, &params.mnt_range_pitch);
+	param_get(param_handles.mnt_range_roll, &params.mnt_range_roll);
+	param_get(param_handles.mnt_range_yaw, &params.mnt_range_yaw);
+	param_get(param_handles.mnt_off_pitch, &params.mnt_off_pitch);
+	param_get(param_handles.mnt_off_roll, &params.mnt_off_roll);
+	param_get(param_handles.mnt_off_yaw, &params.mnt_off_yaw);
+	//param_get(param_handles.mav_sysid, &params.mav_sysid);
+	//param_get(param_handles.mav_compid, &params.mav_compid);
+	param_get(param_handles.mnt_rate_pitch, &params.mnt_rate_pitch);
+	param_get(param_handles.mnt_rate_yaw, &params.mnt_rate_yaw);
+	param_get(param_handles.mnt_rc_in_mode, &params.mnt_rc_in_mode);
+	param_get(param_handles.mnt_lnd_p_min, &params.mnt_lnd_p_min);
+	param_get(param_handles.mnt_lnd_p_max, &params.mnt_lnd_p_max);
+}
+
+#define INIT_PARAM(handle, name) do { \
+        if ((handle = param_find(name)) == PARAM_INVALID) { \
+            PX4_ERR("failed to find parameter " name); \
+            return false; \
+        } \
+    } while (0)
+
+bool initialize_params(ParameterHandles &param_handles, Parameters &params)
+{
+	INIT_PARAM(param_handles.mnt_man_pitch, "MNT_MAN_PITCH");
+	INIT_PARAM(param_handles.mnt_man_roll, "MNT_MAN_ROLL");
+	INIT_PARAM(param_handles.mnt_man_yaw, "MNT_MAN_YAW");
+
+	INIT_PARAM(param_handles.mnt_do_stab, "MNT_DO_STAB");
+
+	INIT_PARAM(param_handles.mnt_range_pitch, "MNT_RANGE_PITCH");
+	INIT_PARAM(param_handles.mnt_range_roll, "MNT_RANGE_ROLL");
+	INIT_PARAM(param_handles.mnt_range_yaw, "MNT_RANGE_YAW");
+
+	INIT_PARAM(param_handles.mnt_off_pitch, "MNT_OFF_PITCH");
+	INIT_PARAM(param_handles.mnt_off_roll, "MNT_OFF_ROLL");
+	INIT_PARAM(param_handles.mnt_off_yaw, "MNT_OFF_YAW");
+
+	//INIT_PARAM(param_handles.mav_sysid, "MAV_SYS_ID");
+	//INIT_PARAM(param_handles.mav_compid, "MAV_COMP_ID");
+
+	INIT_PARAM(param_handles.mnt_rate_pitch, "MNT_RATE_PITCH");
+	INIT_PARAM(param_handles.mnt_rate_yaw, "MNT_RATE_YAW");
+
+	INIT_PARAM(param_handles.mnt_rc_in_mode, "MNT_RC_IN_MODE");
+
+	INIT_PARAM(param_handles.mnt_lnd_p_min, "MNT_LND_P_MIN");
+	INIT_PARAM(param_handles.mnt_lnd_p_max, "MNT_LND_P_MAX");
+
+	update_params(param_handles, params);
+	return true;
+}
+
+static void usage()
+{
+	PRINT_MODULE_DESCRIPTION(
+		R"DESCR_STR(
+### Description
+Mount/gimbal Gimbal control driver. It maps several different input methods (eg. RC or MAVLink) to a configured
+output (eg. AUX channels or MAVLink).
+
+Documentation how to use it is on the [gimbal_control](https://docs.px4.io/main/en/advanced/gimbal_control.html) page.
+
+### Examples
+Test the output by setting a angles (all omitted axes are set to 0):
+$ open_gimbal test pitch -45 yaw 30
+)DESCR_STR");
+
+	PRINT_MODULE_USAGE_NAME("open_gimbal", "driver");
+	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_COMMAND("status");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("primary-control", "Set who is in control of gimbal");
+	PRINT_MODULE_USAGE_ARG("<sysid> <compid>", "MAVLink system ID and MAVLink component ID", false);
+	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
+	PRINT_MODULE_USAGE_ARG("roll|pitch|yaw <angle>", "Specify an axis and an angle in degrees", false);
+	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+}

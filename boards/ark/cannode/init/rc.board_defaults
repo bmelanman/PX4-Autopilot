@@ -5,6 +5,28 @@
 
 param set-default SENS_IMU_CLPNOTI 0
 
+# PWM AUX Ch. 1 -> Gimbal Roll
+param set-default PWM_MAIN_FUNC1 420
+
+# PWM AUX Ch. 2 -> Gimbal Pitch
+param set-default PWM_MAIN_FUNC2 421
+
+# PWM AUX Ch. 3 -> Gimbal Yaw
+param set-default PWM_MAIN_FUNC3 422
+
+# Set PWM Speed to 400Hz
+param set-default PWM_MAIN_TIM0 400
+
+# Enable PWM output
 pwm_out start
 
-dshot start
+## Enable DShot output
+#dshot start
+
+## Enable DShot600
+#param set-default PWM_MAIN_TIM0 -3
+##Set DShot telemetry input port to GPS1
+#param set-default DSHOT_TEL_CFG 201
+
+# Start the open-gimbal driver
+open-gimbal start

@@ -35,18 +35,17 @@
 #pragma once
 
 #include "common.h"
+#include "gimbal_params.h"
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
-
+#include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
+#include <uORB/topics/mount_orientation.h>
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_land_detected.h>
 
-#include <uORB/Publication.hpp>
-#include <uORB/topics/mount_orientation.h>
-
-namespace gimbal
+namespace open_gimbal
 {
 
 class OutputBase

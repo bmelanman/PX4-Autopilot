@@ -9,4 +9,11 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		open_gimbal.cpp
+		input.cpp
+		input_test.cpp
+		input_rc.cpp
+		output.cpp
+		output_rc.cpp
+	DEPENDS
+		geo
 	)
