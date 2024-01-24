@@ -41,6 +41,10 @@ namespace open_gimbal
 {
 
 struct Parameters {
+	int32_t mnt_mode_in;
+	int32_t mnt_mode_out;
+	int32_t mnt_mav_sysid_v1;
+	int32_t mnt_mav_compid_v1;
 	int32_t mnt_man_pitch;
 	int32_t mnt_man_roll;
 	int32_t mnt_man_yaw;
@@ -51,8 +55,8 @@ struct Parameters {
 	float mnt_off_pitch;
 	float mnt_off_roll;
 	float mnt_off_yaw;
-	//int32_t mav_sysid;
-	//int32_t mav_compid;
+	int32_t mav_sysid;
+	int32_t mav_compid;
 	float mnt_rate_pitch;
 	float mnt_rate_yaw;
 	int32_t mnt_rc_in_mode;
@@ -61,6 +65,10 @@ struct Parameters {
 };
 
 struct ParameterHandles {
+	param_t mnt_mode_in;
+	param_t mnt_mode_out;
+	param_t mnt_mav_sysid_v1;
+	param_t mnt_mav_compid_v1;
 	param_t mnt_man_pitch;
 	param_t mnt_man_roll;
 	param_t mnt_man_yaw;
@@ -71,8 +79,8 @@ struct ParameterHandles {
 	param_t mnt_off_pitch;
 	param_t mnt_off_roll;
 	param_t mnt_off_yaw;
-	//param_t mav_sysid;
-	//param_t mav_compid;
+	param_t mav_sysid;
+	param_t mav_compid;
 	param_t mnt_rate_pitch;
 	param_t mnt_rate_yaw;
 	param_t mnt_rc_in_mode;
@@ -80,4 +88,4 @@ struct ParameterHandles {
 	param_t mnt_lnd_p_max;
 };
 
-} /* namespace open_gimbal */
+} /* namespace gimbal */

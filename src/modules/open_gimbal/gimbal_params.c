@@ -31,6 +31,63 @@
 *
 ****************************************************************************/
 
+
+/**
+* Mount input mode
+*
+* This is the protocol used between the ground station and the autopilot.
+*
+* Recommended is Auto, RC only or MAVLink gimbal protocol v2.
+* The rest will be deprecated.
+*
+* @value -1 DISABLED
+* @value 0 Auto (RC and MAVLink gimbal protocol v2)
+* @value 1 RC
+* @value 2 MAVLINK_ROI (protocol v1, to be deprecated)
+* @value 3 MAVLINK_DO_MOUNT (protocol v1, to be deprecated)
+* @value 4 MAVlink gimbal protocol v2
+* @min -1
+* @max 4
+* @group Mount
+* @reboot_required true
+*/
+PARAM_DEFINE_INT32(MNT_MODE_IN, -1);
+
+/**
+* Mount output mode
+*
+* This is the protocol used between the autopilot and a connected gimbal.
+*
+* Recommended is the MAVLink gimbal protocol v2 if the gimbal supports it.
+*
+* @value 0 AUX
+* @value 1 MAVLink gimbal protocol v1
+* @value 2 MAVLink gimbal protocol v2
+* @min 0
+* @max 2
+* @group Mount
+* @reboot_required true
+*/
+PARAM_DEFINE_INT32(MNT_MODE_OUT, 0);
+
+/**
+* Mavlink System ID of the mount
+*
+* If MNT_MODE_OUT is MAVLink gimbal protocol v1, mount configure/control commands will be sent with this target ID.
+*
+* @group Mount
+*/
+PARAM_DEFINE_INT32(MNT_MAV_SYSID, 1);
+
+/**
+* Mavlink Component ID of the mount
+*
+* If MNT_MODE_OUT is MAVLink protocol v2, mount configure/control commands will be sent with this component ID.
+*
+* @group Mount
+*/
+PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
+
 /**
 * Auxiliary channel to control roll (in AUX input or manual mode).
 *
