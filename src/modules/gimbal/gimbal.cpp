@@ -98,7 +98,12 @@ static int gimbal_thread_main(int argc, char *argv[])
 
 	if (!initialize_params(param_handles, params)) {
 		PX4_ERR("could not get mount parameters!");
-		delete g_thread_data->test_input;
+
+		if (thread_data.test_input) {
+			delete (thread_data.test_input);
+			thread_data.test_input = nullptr;
+		}
+
 		return -1;
 	}
 
@@ -477,80 +482,67 @@ int gimbal_main(int argc, char *argv[])
 
 void update_params(ParameterHandles &param_handles, Parameters &params)
 {
-	param_get(param_handles.mnt_mode_in, &params.mnt_mode_in);
-	param_get(param_handles.mnt_mode_out, &params.mnt_mode_out);
-	param_get(param_handles.mnt_mav_sysid_v1, &params.mnt_mav_sysid_v1);
-	param_get(param_handles.mnt_mav_compid_v1, &params.mnt_mav_compid_v1);
-	param_get(param_handles.mnt_man_pitch, &params.mnt_man_pitch);
-	param_get(param_handles.mnt_man_roll, &params.mnt_man_roll);
-	param_get(param_handles.mnt_man_yaw, &params.mnt_man_yaw);
-	param_get(param_handles.mnt_do_stab, &params.mnt_do_stab);
-	param_get(param_handles.mnt_range_pitch, &params.mnt_range_pitch);
-	param_get(param_handles.mnt_range_roll, &params.mnt_range_roll);
-	param_get(param_handles.mnt_range_yaw, &params.mnt_range_yaw);
-	param_get(param_handles.mnt_off_pitch, &params.mnt_off_pitch);
-	param_get(param_handles.mnt_off_roll, &params.mnt_off_roll);
-	param_get(param_handles.mnt_off_yaw, &params.mnt_off_yaw);
-	param_get(param_handles.mav_sysid, &params.mav_sysid);
-	param_get(param_handles.mav_compid, &params.mav_compid);
-	param_get(param_handles.mnt_rate_pitch, &params.mnt_rate_pitch);
-	param_get(param_handles.mnt_rate_yaw, &params.mnt_rate_yaw);
-	param_get(param_handles.mnt_rc_in_mode, &params.mnt_rc_in_mode);
-	param_get(param_handles.mnt_lnd_p_min, &params.mnt_lnd_p_min);
-	param_get(param_handles.mnt_lnd_p_max, &params.mnt_lnd_p_max);
+	param_get(param_handles.mnt_mode_in,        &params.mnt_mode_in);
+	param_get(param_handles.mnt_mode_out,       &params.mnt_mode_out);
+	param_get(param_handles.mnt_mav_sysid_v1,   &params.mnt_mav_sysid_v1);
+	param_get(param_handles.mnt_mav_compid_v1,  &params.mnt_mav_compid_v1);
+	param_get(param_handles.mnt_man_pitch,      &params.mnt_man_pitch);
+	param_get(param_handles.mnt_man_roll,       &params.mnt_man_roll);
+	param_get(param_handles.mnt_man_yaw,        &params.mnt_man_yaw);
+	param_get(param_handles.mnt_do_stab,        &params.mnt_do_stab);
+	param_get(param_handles.mnt_range_pitch,    &params.mnt_range_pitch);
+	param_get(param_handles.mnt_range_roll,     &params.mnt_range_roll);
+	param_get(param_handles.mnt_range_yaw,      &params.mnt_range_yaw);
+	param_get(param_handles.mnt_off_pitch,      &params.mnt_off_pitch);
+	param_get(param_handles.mnt_off_roll,       &params.mnt_off_roll);
+	param_get(param_handles.mnt_off_yaw,        &params.mnt_off_yaw);
+	//param_get(param_handles.mav_sysid,          &params.mav_sysid);
+	//param_get(param_handles.mav_compid,         &params.mav_compid);
+	param_get(param_handles.mnt_rate_pitch,     &params.mnt_rate_pitch);
+	param_get(param_handles.mnt_rate_yaw,       &params.mnt_rate_yaw);
+	param_get(param_handles.mnt_rc_in_mode,     &params.mnt_rc_in_mode);
+	param_get(param_handles.mnt_lnd_p_min,      &params.mnt_lnd_p_min);
+	param_get(param_handles.mnt_lnd_p_max,      &params.mnt_lnd_p_max);
 }
+
+#define INIT_PARAM(handle, name, err_flag) do { \
+        if ((handle = param_find(name)) == PARAM_INVALID) { \
+            PX4_ERR("failed to find parameter " name); \
+            err_flag = true; \
+        } \
+    } while (0)
 
 bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 {
-	param_handles.mnt_mode_in = param_find("MNT_MODE_IN");
-	param_handles.mnt_mode_out = param_find("MNT_MODE_OUT");
-	param_handles.mnt_mav_sysid_v1 = param_find("MNT_MAV_SYSID");
-	param_handles.mnt_mav_compid_v1 = param_find("MNT_MAV_COMPID");
-	param_handles.mnt_man_pitch = param_find("MNT_MAN_PITCH");
-	param_handles.mnt_man_roll = param_find("MNT_MAN_ROLL");
-	param_handles.mnt_man_yaw = param_find("MNT_MAN_YAW");
-	param_handles.mnt_do_stab = param_find("MNT_DO_STAB");
-	param_handles.mnt_range_pitch = param_find("MNT_RANGE_PITCH");
-	param_handles.mnt_range_roll = param_find("MNT_RANGE_ROLL");
-	param_handles.mnt_range_yaw = param_find("MNT_RANGE_YAW");
-	param_handles.mnt_off_pitch = param_find("MNT_OFF_PITCH");
-	param_handles.mnt_off_roll = param_find("MNT_OFF_ROLL");
-	param_handles.mnt_off_yaw = param_find("MNT_OFF_YAW");
-	param_handles.mav_sysid = param_find("MAV_SYS_ID");
-	param_handles.mav_compid = param_find("MAV_COMP_ID");
-	param_handles.mnt_rate_pitch = param_find("MNT_RATE_PITCH");
-	param_handles.mnt_rate_yaw = param_find("MNT_RATE_YAW");
-	param_handles.mnt_rc_in_mode = param_find("MNT_RC_IN_MODE");
-	param_handles.mnt_lnd_p_min = param_find("MNT_LND_P_MIN");
-	param_handles.mnt_lnd_p_max = param_find("MNT_LND_P_MAX");
+	bool err_flag = false;
 
-	if (param_handles.mnt_mode_in == PARAM_INVALID ||
-	    param_handles.mnt_mode_out == PARAM_INVALID ||
-	    param_handles.mnt_mav_sysid_v1 == PARAM_INVALID ||
-	    param_handles.mnt_mav_compid_v1 == PARAM_INVALID ||
-	    param_handles.mnt_man_pitch == PARAM_INVALID ||
-	    param_handles.mnt_man_roll == PARAM_INVALID ||
-	    param_handles.mnt_man_yaw == PARAM_INVALID ||
-	    param_handles.mnt_do_stab == PARAM_INVALID ||
-	    param_handles.mnt_range_pitch == PARAM_INVALID ||
-	    param_handles.mnt_range_roll == PARAM_INVALID ||
-	    param_handles.mnt_range_yaw == PARAM_INVALID ||
-	    param_handles.mnt_off_pitch == PARAM_INVALID ||
-	    param_handles.mnt_off_roll == PARAM_INVALID ||
-	    param_handles.mnt_off_yaw == PARAM_INVALID ||
-	    param_handles.mav_sysid == PARAM_INVALID ||
-	    param_handles.mav_compid == PARAM_INVALID ||
-	    param_handles.mnt_rate_pitch == PARAM_INVALID ||
-	    param_handles.mnt_rate_yaw == PARAM_INVALID ||
-	    param_handles.mnt_rc_in_mode == PARAM_INVALID ||
-	    param_handles.mnt_lnd_p_min == PARAM_INVALID ||
-	    param_handles.mnt_lnd_p_max == PARAM_INVALID
-	   ) {
-		return false;
+	INIT_PARAM(param_handles.mnt_mode_in, 		"MNT_MODE_IN", 	    err_flag);
+	INIT_PARAM(param_handles.mnt_mode_out, 		"MNT_MODE_OUT", 	err_flag);
+	INIT_PARAM(param_handles.mnt_mav_sysid_v1, 	"MNT_MAV_SYSID", 	err_flag);
+	INIT_PARAM(param_handles.mnt_mav_compid_v1, 	"MNT_MAV_COMPID", 	err_flag);
+	INIT_PARAM(param_handles.mnt_man_pitch, 	"MNT_MAN_PITCH", 	err_flag);
+	INIT_PARAM(param_handles.mnt_man_roll, 		"MNT_MAN_ROLL", 	err_flag);
+	INIT_PARAM(param_handles.mnt_man_yaw, 		"MNT_MAN_YAW", 	    err_flag);
+	INIT_PARAM(param_handles.mnt_do_stab, 		"MNT_DO_STAB", 	    err_flag);
+	INIT_PARAM(param_handles.mnt_range_pitch, 	"MNT_RANGE_PITCH", 	err_flag);
+	INIT_PARAM(param_handles.mnt_range_roll, 	"MNT_RANGE_ROLL", 	err_flag);
+	INIT_PARAM(param_handles.mnt_range_yaw, 	"MNT_RANGE_YAW", 	err_flag);
+	INIT_PARAM(param_handles.mnt_off_pitch, 	"MNT_OFF_PITCH", 	err_flag);
+	INIT_PARAM(param_handles.mnt_off_roll, 		"MNT_OFF_ROLL", 	err_flag);
+	INIT_PARAM(param_handles.mnt_off_yaw, 		"MNT_OFF_YAW", 	    err_flag);
+	//INIT_PARAM(param_handles.mav_sysid, 		"MAV_SYS_ID", 	    err_flag);
+	//INIT_PARAM(param_handles.mav_compid, 		"MAV_COMP_ID", 	    err_flag);
+	INIT_PARAM(param_handles.mnt_rate_pitch, 	"MNT_RATE_PITCH", 	err_flag);
+	INIT_PARAM(param_handles.mnt_rate_yaw, 		"MNT_RATE_YAW", 	err_flag);
+	INIT_PARAM(param_handles.mnt_rc_in_mode, 	"MNT_RC_IN_MODE", 	err_flag);
+	INIT_PARAM(param_handles.mnt_lnd_p_min, 	"MNT_LND_P_MIN", 	err_flag);
+	INIT_PARAM(param_handles.mnt_lnd_p_max, 	"MNT_LND_P_MAX", 	err_flag);
+
+	if (!err_flag) {
+		update_params(param_handles, params);
 	}
 
-	update_params(param_handles, params);
-	return true;
+	return !err_flag;
 }
 
 static void usage()
