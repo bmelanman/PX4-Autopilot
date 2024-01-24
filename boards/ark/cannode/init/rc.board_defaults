@@ -5,28 +5,50 @@
 
 param set-default SENS_IMU_CLPNOTI 0
 
+# Start commander
+commander start
+
+# Set the prearmed state to 2 (always)
+param set COM_PREARM_MODE 2
+
 # PWM AUX Ch. 1 -> Gimbal Roll
-param set-default PWM_MAIN_FUNC1 420
+param set PWM_MAIN_FUNC1 420
+param set PWM_MAIN_MIN1  1000 # Default
+param set PWM_MAIN_MAX1  2000 # Default
+param set PWM_MAIN_DIS1  1000 # Default
+param set PWM_MAIN_FAIL1 -1   # Default
 
 # PWM AUX Ch. 2 -> Gimbal Pitch
-param set-default PWM_MAIN_FUNC2 421
+param set PWM_MAIN_FUNC2 421
+param set PWM_MAIN_MIN2  1000 # Default
+param set PWM_MAIN_MAX2  2000 # Default
+param set PWM_MAIN_DIS2  1000 # Default
+param set PWM_MAIN_FAIL2 -1   # Default
 
 # PWM AUX Ch. 3 -> Gimbal Yaw
-param set-default PWM_MAIN_FUNC3 422
+param set PWM_MAIN_FUNC3 422
+param set PWM_MAIN_MIN3  1000 # Default
+param set PWM_MAIN_MAX3  2000 # Default
+param set PWM_MAIN_DIS3  1000 # Default
+param set PWM_MAIN_FAIL3 -1   # Default
 
 # Set PWM Speed to 400Hz
-param set-default PWM_MAIN_TIM0 400
+param set PWM_MAIN_TIM0 400
 
 # Enable PWM output
 pwm_out start
 
-## Enable DShot output
-#dshot start
+# Enable stabilisation
+param set MNT_DO_STAB 1
 
-## Enable DShot600
-#param set-default PWM_MAIN_TIM0 -3
-##Set DShot telemetry input port to GPS1
-#param set-default DSHOT_TEL_CFG 201
+# Set gimbal output channels
+param set MNT_MAN_ROLL  1
+param set MNT_MAN_PITCH 2
+param set MNT_MAN_YAW   3
 
-# Start the open-gimbal driver
+# Set input and output to RC
+param set MNT_MODE_IN   1
+param set MNT_MODE_OUT  0
+
+# Start the gimbal driver
 open-gimbal start
