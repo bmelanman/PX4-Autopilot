@@ -41,6 +41,8 @@
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/tasks.h>
 
+#include <matrix/matrix/math.hpp>
+
 // Parameters
 #include "gimbal_params.h"
 
@@ -55,7 +57,7 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/mount_orientation.h>
+#include <uORB/topics/vehicle_attitude.h>
 
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/atomic.h>
@@ -418,36 +420,64 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
-#define OPEN_GIMBAL_GYRO_TEST_SLEEP_TIME ( 1000000U )
+#define NUM_ORIENTATION_UPDATES    ( 100U )
+#define ORIENTATION_UPDATE_RATE_HZ ( 2U )
 
-int gyro_test(int argc, char *argv[])
+//! This currently just prints the current orientation of the gimbal and doesn't stop until
+//! the loop is done bc IDK how to stop it manually with CTRL+C
+
+//! This will be deleted later
+int get_orientation(int argc, char *argv[])
 {
-	int i = 1000;
+	// Subscribe to VehicleAttitude
+	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
 
-	// Orientation subscription
-	uORB::Subscription mount_sub{ORB_ID(mount_orientation)};
-	mount_orientation_s mount;
+	vehicle_attitude_s vehicle_attitude{};
 
-	PX4_INFO("\n\n");
+	unsigned int i;
+	float roll, pitch, yaw;
+	matrix::Quaternion<double> q;
+	matrix::Euler<double> euler_angles;
 
-	// Loop until the user presses CTRL+C or the driver
-	// is stopped for some other reason.
-	while (i--) {
+	for (i = 0; i < NUM_ORIENTATION_UPDATES; i++) {
 
-		// Get the latest mount data
-		mount_sub.copy(&mount);
+		// Get the current vehicle attitude
+		if (_vehicle_attitude_sub.copy(&vehicle_attitude)) {
 
-		// Move the cursor to the top of the screen and clear the line
-		PX4_INFO("\033[2J\033[1;1H");
+			// Convert to a matrix::Quaternion
+			q = matrix::Quaternion<double>(
+				    vehicle_attitude.q[0],
+				    vehicle_attitude.q[1],
+				    vehicle_attitude.q[2],
+				    vehicle_attitude.q[3]
+			    );
 
-		// Print the current gyro output
-		PX4_INFO("Current Orientation: %8.4f %8.4f %8.4f",
-			 (double)mount.attitude_euler_angle[0],
-			 (double)mount.attitude_euler_angle[1],
-			 (double)mount.attitude_euler_angle[2]);
+			// Convert the quaternion to Euler angles
+			euler_angles = matrix::Euler<double>(q);
 
-		// Wait for a bit before the next loop
-		px4_usleep(OPEN_GIMBAL_GYRO_TEST_SLEEP_TIME);
+			// Convert to degrees
+			roll = euler_angles(0) * 180 / M_PI;
+			pitch = euler_angles(1) * 180 / M_PI;
+			yaw = euler_angles(2) * 180 / M_PI;
+
+			// Move the cursor to the top and clear the screen
+			printf("\033[1;1H\033[2J");
+
+			// Print the Euler angles
+			PX4_INFO(
+				"Current Orientation (deg):	\n"
+				"Roll:  %8.4f			\n"
+				"Pitch: %8.4f			\n"
+				"Yaw:   %8.4f			\n",
+				(double)roll, (double)pitch, (double)yaw
+			);
+
+		} else {
+			PX4_ERR("Error getting vehicle attitude! :(");
+		}
+
+		// Wait for the next update
+		px4_usleep(1000000 / ORIENTATION_UPDATE_RATE_HZ);
 	}
 
 	return PX4_OK;
@@ -497,8 +527,8 @@ int open_gimbal_main(int argc, char *argv[])
 	} else if (!strcmp(argv[1], "status")) {
 		return status();
 
-	} else if (!strcmp(argv[1], "gyro_test")) {
-		return gyro_test(argc, argv);
+	} else if (!strcmp(argv[1], "get_orientation")) {
+		return get_orientation(argc, argv);
 
 	} else if (!strcmp(argv[1], "test")) {
 		return test(argc, argv);
@@ -617,7 +647,7 @@ $ open_gimbal test pitch -45 yaw 30
 	//PRINT_MODULE_USAGE_ARG("<sysid> <compid>", "MAVLink system ID and MAVLink component ID", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
 	PRINT_MODULE_USAGE_ARG("roll|pitch|yaw <angle>", "Specify an axis and an angle in degrees", false);
-	PRINT_MODULE_USAGE_COMMAND_DESCR("gyro_test", "Print the current gyro output");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("get_orientation", "Print the current gyro output");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Stop the driver");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 }

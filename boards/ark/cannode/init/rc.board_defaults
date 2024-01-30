@@ -3,15 +3,8 @@
 # board specific defaults
 #------------------------------------------------------------------------------
 
-# Enable logging
-#param set SDLOG_MODE 1
-# Maximum number of logs to keep
-#param set SDLOG_DIRS_MAX 100
-# Enable log settings 'Default' (Bit 0), 'Debug' (Bit 5), and 'Sensor Comparison' (Bit 6)
-#param set SDLOG_PROFILE 0x61
-
-# Disable Mag
-param set EKF2_MAG_TYPE 5
+# Account for the board being rotated 90 degrees
+param set SENS_BOARD_ROT 2
 
 #------------------------------------------------------------------------------
 # Commander Paramters
@@ -29,7 +22,7 @@ param set COM_ARM_SDCARD 0
 param set COM_ARM_WO_GPS 1
 
 #------------------------------------------------------------------------------
-# IMU & Gyro Paramters
+# Sensor Paramters
 #------------------------------------------------------------------------------
 
 # Notify if the IMU is clipping
@@ -42,6 +35,9 @@ param set SENS_IMU_MODE 1
 # Configure the Gyroscope
 param set IMU_GYRO_CAL_EN 1
 param set CAL_GYRO0_PRIO 50 # Default
+
+# Configure the Accelerometer
+param set CAL_ACC0_PRIO 50 # Default
 
 #------------------------------------------------------------------------------
 # PWM Output Paramters
