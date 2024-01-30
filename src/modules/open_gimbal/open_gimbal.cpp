@@ -55,9 +55,13 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/mount_orientation.h>
 
 #include <px4_platform_common/module.h>
 #include <px4_platform_common/atomic.h>
+
+// Polling refresh rate in microseconds
+#define REFRESH_RATE_US ( 100U )
 
 using namespace time_literals;
 using namespace open_gimbal;
@@ -73,7 +77,7 @@ struct ThreadData {
 	int last_input_active = -1;
 	OutputBase *output_obj = nullptr;
 	InputTest *test_input = nullptr;
-	ControlData control_data {};
+	ControlData control_data = {0};
 };
 
 static ThreadData *g_thread_data = nullptr;
@@ -102,8 +106,9 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		return PX4_ERROR;
 	}
 
-	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	thread_running.store(true);
+
+	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	g_thread_data = &thread_data;
 
 	thread_data.test_input = new InputTest(params);
@@ -138,7 +143,9 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	if (!thread_data.output_obj) {
 		PX4_ERR("output memory allocation failed");
 		thread_should_exit.store(true);
-	}
+	};
+
+	PX4_INFO("Initialization complete!");
 
 	while (!thread_should_exit.load()) {
 
@@ -152,8 +159,6 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 		if (thread_data.last_input_active == -1) {
 			// Reset control as no one is active anymore, or yet.
-			//thread_data.control_data.sysid_primary_control = 0;
-			//thread_data.control_data.compid_primary_control = 0;
 			thread_data.control_data.device_compid = 0;
 		}
 
@@ -171,47 +176,44 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 				const unsigned int poll_timeout =
 					(already_active || thread_data.last_input_active == -1) ? 20 : 0;
 
+				// Update input
 				update_result = thread_data.input_objs[i]->update(poll_timeout, thread_data.control_data, already_active);
 
-				bool break_loop = false;
-
-				switch (update_result) {
-				case InputBase::UpdateResult::NoUpdate:
+				// Check if we need to switch to a different input
+				if (update_result == InputBase::UpdateResult::NoUpdate) {
 					if (already_active) {
 						// No longer active.
 						thread_data.last_input_active = -1;
 					}
 
-					break;
-
-				case InputBase::UpdateResult::UpdatedActive:
+				} else if (update_result == InputBase::UpdateResult::UpdatedActive) {
 					thread_data.last_input_active = i;
-					break_loop = true;
 					break;
 
-				case InputBase::UpdateResult::UpdatedActiveOnce:
+				} else if (update_result == InputBase::UpdateResult::UpdatedActiveOnce) {
 					thread_data.last_input_active = -1;
-					break_loop = true;
 					break;
 
-				case InputBase::UpdateResult::UpdatedNotActive:
-					// Ignore, input not active
-					break;
-				}
+				} // Else ignore, input not active
 
-				if (break_loop) {
-					break;
-				}
 			}
 
-			if (params.mnt_do_stab == 1) {
+			// Set stabilization mode
+			switch (params.mnt_do_stab) {
+			case 1:
+				// Always stabilize
 				thread_data.output_obj->set_stabilize(true, true, true);
+				break;
 
-			} else if (params.mnt_do_stab == 2) {
+			case 2:
+				// Only stabilize the yaw axis
 				thread_data.output_obj->set_stabilize(false, false, true);
+				break;
 
-			} else {
+			default:
+				// Never stabilize
 				thread_data.output_obj->set_stabilize(false, false, false);
+				break;
 			}
 
 			// Update output
@@ -222,11 +224,13 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			// Publish the mount orientation
 			thread_data.output_obj->publish();
 
-		} else {
-			// We still need to wake up regularly to check for thread exit requests
-			px4_usleep(1e6);
 		}
+
+		// Wait for a bit before the next loop
+		px4_usleep(REFRESH_RATE_US);
 	}
+
+	PX4_INFO("Deinitializing...");
 
 	g_thread_data = nullptr;
 
@@ -245,6 +249,9 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	}
 
 	thread_running.store(false);
+
+	PX4_INFO("Deinitialization complete, exiting...");
+
 	return PX4_OK;
 }
 
@@ -255,8 +262,7 @@ int start(void)
 		return PX4_ERROR;
 	}
 
-	PX4_DEBUG("starting");
-	PX4_INFO("starting");
+	PX4_INFO("Starting...");
 
 	thread_should_exit.store(false);
 
@@ -265,7 +271,7 @@ int start(void)
 				       "open_gimbal",
 				       SCHED_DEFAULT,
 				       SCHED_PRIORITY_DEFAULT,
-				       2000,
+				       2100,
 				       (px4_main_t)&open_gimbal_thread_main,
 				       (char *const *)nullptr);
 
@@ -276,11 +282,12 @@ int start(void)
 
 	int counter = 0;
 
-	while (!thread_running.load()) {
+	while (thread_running.load() != true) {
 		px4_usleep(5000);
 
 		if (++counter >= 100) {
 			PX4_ERR("timed out waiting for task to start");
+			thread_should_exit.store(true);
 			return PX4_ERROR;
 		}
 	}
@@ -289,6 +296,8 @@ int start(void)
 		PX4_ERR("task exited during startup");
 		return PX4_ERROR;
 	}
+
+	PX4_INFO("Task started successfully!");
 
 	return PX4_OK;
 }
@@ -409,6 +418,41 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
+#define OPEN_GIMBAL_GYRO_TEST_SLEEP_TIME ( 1000000U )
+
+int gyro_test(int argc, char *argv[])
+{
+	int i = 1000;
+
+	// Orientation subscription
+	uORB::Subscription mount_sub{ORB_ID(mount_orientation)};
+	mount_orientation_s mount;
+
+	PX4_INFO("\n\n");
+
+	// Loop until the user presses CTRL+C or the driver
+	// is stopped for some other reason.
+	while (i--) {
+
+		// Get the latest mount data
+		mount_sub.copy(&mount);
+
+		// Move the cursor to the top of the screen and clear the line
+		PX4_INFO("\033[2J\033[1;1H");
+
+		// Print the current gyro output
+		PX4_INFO("Current Orientation: %8.4f %8.4f %8.4f",
+			 (double)mount.attitude_euler_angle[0],
+			 (double)mount.attitude_euler_angle[1],
+			 (double)mount.attitude_euler_angle[2]);
+
+		// Wait for a bit before the next loop
+		px4_usleep(OPEN_GIMBAL_GYRO_TEST_SLEEP_TIME);
+	}
+
+	return PX4_OK;
+}
+
 int primary_control(int argc, char *argv[])
 {
 	if (thread_running.load() && g_thread_data && g_thread_data->test_input) {
@@ -453,11 +497,14 @@ int open_gimbal_main(int argc, char *argv[])
 	} else if (!strcmp(argv[1], "status")) {
 		return status();
 
+	} else if (!strcmp(argv[1], "gyro_test")) {
+		return gyro_test(argc, argv);
+
 	} else if (!strcmp(argv[1], "test")) {
 		return test(argc, argv);
 
-	} else if (!strcmp(argv[1], "primary-control")) {
-		return primary_control(argc, argv);
+		//} else if (!strcmp(argv[1], "primary-control")) {
+		//	return primary_control(argc, argv);
 
 	}
 
@@ -488,8 +535,10 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_off_roll, &params.mnt_off_roll);
 	param_get(param_handles.mnt_off_yaw, &params.mnt_off_yaw);
 
-	param_get(param_handles.mav_sysid, &params.mav_sysid);
-	param_get(param_handles.mav_compid, &params.mav_compid);
+	//param_get(param_handles.mav_sysid, &params.mav_sysid);
+	//param_get(param_handles.mav_compid, &params.mav_compid);
+	params.mav_sysid = 0;
+	params.mav_compid = 0;
 
 	param_get(param_handles.mnt_rate_pitch, &params.mnt_rate_pitch);
 	param_get(param_handles.mnt_rate_yaw, &params.mnt_rate_yaw);
@@ -531,9 +580,6 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_off_roll, 		"MNT_OFF_ROLL", 	err_flag);
 	INIT_PARAM(param_handles.mnt_off_yaw, 		"MNT_OFF_YAW", 	    	err_flag);
 
-	INIT_PARAM(param_handles.mav_sysid, 		"MAV_SYS_ID", 	    	err_flag);
-	INIT_PARAM(param_handles.mav_compid, 		"MAV_COMP_ID", 	    	err_flag);
-
 	INIT_PARAM(param_handles.mnt_rate_pitch, 	"MNT_RATE_PITCH", 	err_flag);
 	INIT_PARAM(param_handles.mnt_rate_yaw, 		"MNT_RATE_YAW", 	err_flag);
 
@@ -567,9 +613,11 @@ $ open_gimbal test pitch -45 yaw 30
 	PRINT_MODULE_USAGE_NAME("open_gimbal", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
 	PRINT_MODULE_USAGE_COMMAND("status");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("primary-control", "Set who is in control of gimbal");
-	PRINT_MODULE_USAGE_ARG("<sysid> <compid>", "MAVLink system ID and MAVLink component ID", false);
+	//PRINT_MODULE_USAGE_COMMAND_DESCR("primary-control", "Set who is in control of gimbal");
+	//PRINT_MODULE_USAGE_ARG("<sysid> <compid>", "MAVLink system ID and MAVLink component ID", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
 	PRINT_MODULE_USAGE_ARG("roll|pitch|yaw <angle>", "Specify an axis and an angle in degrees", false);
+	PRINT_MODULE_USAGE_COMMAND_DESCR("gyro_test", "Print the current gyro output");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Stop the driver");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 }

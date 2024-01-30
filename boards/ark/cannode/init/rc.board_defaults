@@ -3,13 +3,49 @@
 # board specific defaults
 #------------------------------------------------------------------------------
 
-param set-default SENS_IMU_CLPNOTI 0
+# Enable logging
+#param set SDLOG_MODE 1
+# Maximum number of logs to keep
+#param set SDLOG_DIRS_MAX 100
+# Enable log settings 'Default' (Bit 0), 'Debug' (Bit 5), and 'Sensor Comparison' (Bit 6)
+#param set SDLOG_PROFILE 0x61
 
-# Start commander
-commander start
+# Disable Mag
+param set EKF2_MAG_TYPE 5
+
+#------------------------------------------------------------------------------
+# Commander Paramters
+#------------------------------------------------------------------------------
 
 # Set the prearmed state to 2 (always)
 param set COM_PREARM_MODE 2
+
+# Disable mag strength check
+param set COM_ARM_MAG_STR 0
+# Disable SD card check
+param set COM_ARM_SDCARD 0
+
+# Allow arming without GPS
+param set COM_ARM_WO_GPS 1
+
+#------------------------------------------------------------------------------
+# IMU & Gyro Paramters
+#------------------------------------------------------------------------------
+
+# Notify if the IMU is clipping
+param set-default SENS_IMU_CLPNOTI 0
+
+# Configure the IMU
+param set SENS_IMU_AUTOCAL 1
+param set SENS_IMU_MODE 1
+
+# Configure the Gyroscope
+param set IMU_GYRO_CAL_EN 1
+param set CAL_GYRO0_PRIO 50 # Default
+
+#------------------------------------------------------------------------------
+# PWM Output Paramters
+#------------------------------------------------------------------------------
 
 # PWM AUX Ch. 1 -> Gimbal Roll
 param set PWM_MAIN_FUNC1 420
@@ -35,8 +71,9 @@ param set PWM_MAIN_FAIL3 -1   # Default
 # Set PWM Speed to 400Hz
 param set PWM_MAIN_TIM0 400
 
-# Enable PWM output
-pwm_out start
+#------------------------------------------------------------------------------
+# Open-Gimbal Paramters
+#------------------------------------------------------------------------------
 
 # Enable stabilisation
 param set MNT_DO_STAB 1
@@ -50,5 +87,18 @@ param set MNT_MAN_YAW   3
 param set MNT_MODE_IN   1
 param set MNT_MODE_OUT  0
 
-# Start the gimbal driver
-open-gimbal start
+#------------------------------------------------------------------------------
+# Start Necessary Services
+#------------------------------------------------------------------------------
+
+# Start the PWM output driver
+pwm_out start
+
+# Start commander
+commander start
+
+# Start ECL/EKF2
+ekf2 start
+
+# Start Open-Gimbal
+open_gimbal start
