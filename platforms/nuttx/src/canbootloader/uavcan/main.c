@@ -61,9 +61,9 @@
 #include <lib/crc/crc.h>
 
 //#define DEBUG_APPLICATION_INPLACE    1 /* Never leave defined */
-#define DEBUG_NO_FW_UPDATE           1 /* With DEBUG_APPLICATION_INPLACE
-                                        * prevents fw update
-                                        */
+//#define DEBUG_NO_FW_UPDATE           1 /* With DEBUG_APPLICATION_INPLACE
+//                                        * prevents fw update
+//                                        */
 
 /* Using 2 character text in  LogMessage */
 

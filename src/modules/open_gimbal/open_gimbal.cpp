@@ -33,7 +33,6 @@
 
 // TODO:
 // :- Enable DEBUG_APPLICATION_INPLACE
-// :- Follow up on motors?
 
 #include <cstdint>
 #include <stdlib.h>
@@ -113,7 +112,9 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
 	g_thread_data = &thread_data;
 
+	// Initialize test input object to set the initial orientation
 	thread_data.test_input = new InputTest(params);
+	thread_data.test_input->set_test_input(0, 0, 0);
 
 	// Initialize input object(s)
 	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
@@ -232,12 +233,13 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		px4_usleep(REFRESH_RATE_US);
 	}
 
-	PX4_INFO("Deinitializing...");
+	PX4_INFO("D
+		 | einitializing...");
 
-	g_thread_data = nullptr;
+		 g_thread_data = nullptr;
 
 	for (int i = 0; i < input_objs_len_max; ++i) {
-		if (thread_data.input_objs[i]) {
+	if (thread_data.input_objs[i]) {
 			delete (thread_data.input_objs[i]);
 			thread_data.input_objs[i] = nullptr;
 		}
@@ -246,15 +248,15 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	thread_data.input_objs_len = 0;
 
 	if (thread_data.output_obj) {
-		delete (thread_data.output_obj);
+	delete (thread_data.output_obj);
 		thread_data.output_obj = nullptr;
 	}
 
 	thread_running.store(false);
 
-	PX4_INFO("Deinitialization complete, exiting...");
+		      PX4_INFO("Deinitialization complete, exiting...");
 
-	return PX4_OK;
+		      return PX4_OK;
 }
 
 int start(void)
@@ -420,11 +422,11 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
-#define NUM_ORIENTATION_UPDATES    ( 100U )
-#define ORIENTATION_UPDATE_RATE_HZ ( 2U )
-
 //! This currently just prints the current orientation of the gimbal and doesn't stop until
 //! the loop is done bc IDK how to stop it manually with CTRL+C
+
+#define NUM_ORIENTATION_UPDATES    ( 100U )
+#define ORIENTATION_UPDATE_RATE_HZ ( 2U )
 
 //! This will be deleted later
 int get_orientation(int argc, char *argv[])
@@ -483,33 +485,6 @@ int get_orientation(int argc, char *argv[])
 	return PX4_OK;
 }
 
-int primary_control(int argc, char *argv[])
-{
-	if (thread_running.load() && g_thread_data && g_thread_data->test_input) {
-
-		if (argc == 4) {
-			//g_thread_data->control_data.sysid_primary_control = (uint8_t)strtol(argv[2], nullptr, 0);
-			//g_thread_data->control_data.compid_primary_control = (uint8_t)strtol(argv[3], nullptr, 0);
-
-			PX4_INFO("Control set to: %d/%d", 0, 0);
-			// g_thread_data->control_data.sysid_primary_control,
-			// g_thread_data->control_data.compid_primary_control);
-
-			return PX4_OK;
-
-		} else {
-			PX4_ERR("not enough arguments");
-			usage();
-			return PX4_ERROR;
-		}
-
-	} else {
-		PX4_WARN("not running");
-		usage();
-		return PX4_ERROR;
-	}
-}
-
 int open_gimbal_main(int argc, char *argv[])
 {
 	if (argc < 2) {
@@ -533,12 +508,9 @@ int open_gimbal_main(int argc, char *argv[])
 	} else if (!strcmp(argv[1], "test")) {
 		return test(argc, argv);
 
-		//} else if (!strcmp(argv[1], "primary-control")) {
-		//	return primary_control(argc, argv);
-
 	}
 
-	PX4_ERR("unrecognized command");
+	PX4_ERR("unrecognized command '%s'", argv[1]);
 	usage();
 	return PX4_ERROR;
 }
@@ -642,12 +614,12 @@ $ open_gimbal test pitch -45 yaw 30
 
 	PRINT_MODULE_USAGE_NAME("open_gimbal", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_COMMAND("status");
+	//PRINT_MODULE_USAGE_COMMAND("status");
 	//PRINT_MODULE_USAGE_COMMAND_DESCR("primary-control", "Set who is in control of gimbal");
 	//PRINT_MODULE_USAGE_ARG("<sysid> <compid>", "MAVLink system ID and MAVLink component ID", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
-	PRINT_MODULE_USAGE_ARG("roll|pitch|yaw <angle>", "Specify an axis and an angle in degrees", false);
+	PRINT_MODULE_USAGE_ARG("<roll|pitch|yaw <angle>>", "Specify an axis and an angle in degrees", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("get_orientation", "Print the current gyro output");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Stop the driver");
+	//PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Stop the driver");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 }

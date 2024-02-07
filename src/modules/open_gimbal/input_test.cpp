@@ -70,10 +70,6 @@ InputTest::UpdateResult InputTest::update(unsigned int timeout_ms, ControlData &
 	control_data.type_data.angle.angular_velocity[1] = NAN;
 	control_data.type_data.angle.angular_velocity[2] = NAN;
 
-	// For testing we mark ourselves as in control.
-	//control_data.sysid_primary_control = _parameters.mav_sysid;
-	//control_data.compid_primary_control = _parameters.mav_compid;
-
 	_has_been_set.store(false);
 	return UpdateResult::UpdatedActive;
 }
