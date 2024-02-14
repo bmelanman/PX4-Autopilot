@@ -29,8 +29,8 @@ param set COM_PREARM_MODE 2
 # Sensor Paramters
 #------------------------------------------------------------------------------
 
-# Account for board rotation (Roll: 180, Pitch: 0, Yaw: 90)
-param set SENS_BOARD_ROT 10
+# Account for board rotation (Roll: 270, Pitch: 0, Yaw: 90)
+param set SENS_BOARD_ROT 30
 
 # Notify if the IMU is clipping
 param set-default SENS_IMU_CLPNOTI 0
@@ -99,7 +99,7 @@ param set MNT_RANGE_ROLL  360
 param set MNT_RANGE_PITCH 360
 param set MNT_RANGE_YAW   360 # Default
 
-param set MNT_OFF_ROLL     45
+param set MNT_OFF_ROLL     90
 param set MNT_OFF_PITCH     0
 param set MNT_OFF_YAW     -90 # Default
 

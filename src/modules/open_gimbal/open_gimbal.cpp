@@ -233,13 +233,12 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		px4_usleep(REFRESH_RATE_US);
 	}
 
-	PX4_INFO("D
-		 | einitializing...");
+	PX4_INFO("Deinitializing...");
 
-		 g_thread_data = nullptr;
+	g_thread_data = nullptr;
 
 	for (int i = 0; i < input_objs_len_max; ++i) {
-	if (thread_data.input_objs[i]) {
+		if (thread_data.input_objs[i]) {
 			delete (thread_data.input_objs[i]);
 			thread_data.input_objs[i] = nullptr;
 		}
@@ -248,15 +247,15 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	thread_data.input_objs_len = 0;
 
 	if (thread_data.output_obj) {
-	delete (thread_data.output_obj);
+		delete (thread_data.output_obj);
 		thread_data.output_obj = nullptr;
 	}
 
 	thread_running.store(false);
 
-		      PX4_INFO("Deinitialization complete, exiting...");
+	PX4_INFO("Deinitialization complete, exiting...");
 
-		      return PX4_OK;
+	return PX4_OK;
 }
 
 int start(void)

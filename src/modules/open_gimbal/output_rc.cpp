@@ -48,35 +48,57 @@ OutputRC::OutputRC(const Parameters &parameters)
 {
 }
 
+/**
+ * @brief Converts a target angle in degrees to a gimbal control value in the range [-1, 1]
+ * @param target_angle - The target angle in radians
+ * @param range - The range in radians
+ * @return - A gimbal control value in the range [-1, 1]
+ */
+float calculate_gimbal_control(float target_angle, float range)
+{
+	// Constrain the target angle to within the range
+	float target_angle_constrained = constrain(target_angle, -range / 2.0f, range / 2.0f);
+
+	// Normalize the target angle to the range [-1, 1]
+	return target_angle_constrained / (range / 2.0f);
+}
+
 void OutputRC::update(const ControlData &control_data, bool new_setpoints, uint8_t &gimbal_device_id)
 {
+	// Update if we have new setpoints
 	if (new_setpoints) {
 		_set_angle_setpoints(control_data);
 	}
 
+	// Update if we have new control data
 	_handle_position_update(control_data);
 
 	hrt_abstime t = hrt_absolute_time();
+
+	// Calculate the angle outputs
 	_calculate_angle_output(t);
 
+	// Publish the angle outputs
 	_stream_device_attitude_status();
-
-	// If the output is RC, then it means we are also the gimbal device. gimbal_device_id = (uint8_t)_parameters.mnt_mav_compid_v1;
 
 	// _angle_outputs are in radians, gimbal_controls are in [-1, 1]
 	gimbal_controls_s gimbal_controls{};
-	gimbal_controls.control[gimbal_controls_s::INDEX_ROLL] = constrain(
-			(_angle_outputs[0] + math::radians(_parameters.mnt_off_roll)) *
-			(1.0f / (math::radians(_parameters.mnt_range_roll / 2.0f))),
-			-1.f, 1.f);
-	gimbal_controls.control[gimbal_controls_s::INDEX_PITCH] = constrain(
-			(_angle_outputs[1] + math::radians(_parameters.mnt_off_pitch)) *
-			(1.0f / (math::radians(_parameters.mnt_range_pitch / 2.0f))),
-			-1.f, 1.f);
-	gimbal_controls.control[gimbal_controls_s::INDEX_YAW] = constrain(
-			(_angle_outputs[2] + math::radians(_parameters.mnt_off_yaw)) *
-			(1.0f / (math::radians(_parameters.mnt_range_yaw / 2.0f))),
-			-1.f, 1.f);
+
+	gimbal_controls.control[gimbal_controls_s::INDEX_ROLL] = calculate_gimbal_control(
+			_angle_outputs[0] + math::radians(_parameters.mnt_off_roll),
+			math::radians(_parameters.mnt_range_roll)
+		);
+
+	gimbal_controls.control[gimbal_controls_s::INDEX_PITCH] = calculate_gimbal_control(
+			_angle_outputs[1] + math::radians(_parameters.mnt_off_pitch),
+			math::radians(_parameters.mnt_range_pitch)
+		);
+
+	gimbal_controls.control[gimbal_controls_s::INDEX_YAW] = calculate_gimbal_control(
+			_angle_outputs[2] + math::radians(_parameters.mnt_off_yaw),
+			math::radians(_parameters.mnt_range_yaw)
+		);
+
 	gimbal_controls.timestamp = hrt_absolute_time();
 	_gimbal_controls_pub.publish(gimbal_controls);
 
