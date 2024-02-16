@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2023 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2020 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,17 +31,37 @@
 #
 ############################################################################
 
-add_subdirectory(DifferentialDriveKinematics)
+if("${PX4_BOARD_LABEL}" STREQUAL  "canbootloader")
 
-px4_add_module(
-	MODULE modules__differential_drive_control
-	MAIN differential_drive_control
-	SRCS
-		DifferentialDriveControl.cpp
-		DifferentialDriveControl.hpp
-	DEPENDS
-		DifferentialDriveKinematics
-		px4_work_queue
-	MODULE_CONFIG
-		module.yaml
-)
+	add_library(drivers_board
+		boot_config.h
+		boot.c
+		led.c
+		led.h
+	)
+	target_link_libraries(drivers_board
+		PRIVATE
+			nuttx_arch
+			nuttx_drivers
+			canbootloader
+	)
+	target_include_directories(drivers_board PRIVATE ${PX4_SOURCE_DIR}/platforms/nuttx/src/canbootloader)
+
+else()
+	add_library(drivers_board
+		can.c
+		i2c.cpp
+		init.c
+		led.c
+		spi.cpp
+	)
+
+	target_link_libraries(drivers_board
+		PRIVATE
+			arch_spi
+			drivers__led # drv_led_start
+			nuttx_arch
+			nuttx_drivers
+			px4_layer
+	)
+endif()

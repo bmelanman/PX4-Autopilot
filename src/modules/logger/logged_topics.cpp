@@ -57,6 +57,7 @@ void LoggedTopics::add_default_topics()
 	add_topic("commander_state");
 	add_topic("config_overrides");
 	add_topic("cpuload");
+	add_optional_topic("differential_drive_control_output", 100);
 	add_optional_topic("differential_drive_setpoint", 100);
 	add_optional_topic("external_ins_attitude");
 	add_optional_topic("external_ins_global_position");
@@ -68,6 +69,7 @@ void LoggedTopics::add_default_topics()
 	add_optional_topic("follow_target_estimator", 200);
 	add_optional_topic("follow_target_status", 400);
 	add_optional_topic("flaps_setpoint", 1000);
+	add_optional_topic("flight_phase_estimation", 1000);
 	add_topic("gimbal_manager_set_attitude", 500);
 	add_optional_topic("generator_status");
 	add_optional_topic("gps_dump");

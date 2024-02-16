@@ -1,6 +1,6 @@
 ############################################################################
 #
-#   Copyright (c) 2023 PX4 Development Team. All rights reserved.
+#   Copyright (c) 2023-2024 PX4 Development Team. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions
@@ -31,10 +31,22 @@
 #
 ############################################################################
 
-px4_add_library(DifferentialDriveKinematics
-	DifferentialDriveKinematics.cpp
+add_subdirectory(DifferentialDriveControl)
+add_subdirectory(DifferentialDriveGuidance)
+add_subdirectory(DifferentialDriveKinematics)
+
+px4_add_module(
+	MODULE modules__differential_drive
+	MAIN differential_drive
+	SRCS
+		DifferentialDrive.cpp
+		DifferentialDrive.hpp
+	DEPENDS
+		DifferentialDriveControl
+		DifferentialDriveGuidance
+		DifferentialDriveKinematics
+		px4_work_queue
+		modules__control_allocator # for parameter CA_R_REV
+	MODULE_CONFIG
+		module.yaml
 )
-
-target_include_directories(DifferentialDriveKinematics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-
-px4_add_unit_gtest(SRC DifferentialDriveKinematicsTest.cpp LINKLIBS DifferentialDriveKinematics)
