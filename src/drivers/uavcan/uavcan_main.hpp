@@ -55,6 +55,10 @@
 #include "actuators/hardpoint.hpp"
 #endif
 
+#if defined(CONFIG_UAVCAN_CAMERA_GIMBAL_CONTROLLER)
+#include "actuators/camera_gimbal.hpp"
+#endif
+
 
 #include "allocator.hpp"
 
@@ -264,6 +268,9 @@ private:
 #endif
 #if defined(CONFIG_UAVCAN_HARDPOINT_CONTROLLER)
 	UavcanHardpointController	_hardpoint_controller;
+#endif
+#if defined(CONFIG_UAVCAN_CAMERA_GIMBAL_CONTROLLER)
+	UavcanCameraGimbalController	_camera_gimbal_controller;
 #endif
 #if defined(CONFIG_UAVCAN_SAFETY_STATE_CONTROLLER)
 	UavcanSafetyState         	_safety_state_controller;

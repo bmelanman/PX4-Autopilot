@@ -21,6 +21,10 @@ if DRIVERS_UAVCAN
         bool "Include hardpoint controller"
         default y
 
+    config UAVCAN_CAMERA_GIMBAL_CONTROLLER
+        bool "Include camera gimbal controller"
+        default y
+
     config UAVCAN_SAFETY_STATE_CONTROLLER
         bool "Include safety state controller"
         default y
