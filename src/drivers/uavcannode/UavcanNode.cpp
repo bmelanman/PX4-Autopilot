@@ -101,6 +101,10 @@
 #include "Subscribers/ESCRawCommand.hpp"
 #endif // CONFIG_UAVCANNODE_ESC_RAW_COMMAND
 
+#if defined(CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND)
+#include "Subscribers/GimbalAngularCommand.hpp"
+#endif // CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND
+
 #if defined(CONFIG_UAVCANNODE_LIGHTS_COMMAND)
 #include "Subscribers/LightsCommand.hpp"
 #endif // CONFIG_UAVCANNODE_LIGHTS_COMMAND
@@ -426,6 +430,10 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 #if defined(CONFIG_UAVCANNODE_ESC_RAW_COMMAND)
 	_subscriber_list.add(new ESCRawCommand(_node));
 #endif // CONFIG_UAVCANNODE_ESC_RAW_COMMAND
+
+#if defined(CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND)
+	_subscriber_list.add(new GimbalAngularCommand(_node));
+#endif // CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND
 
 #if defined(CONFIG_UAVCANNODE_LIGHTS_COMMAND)
 	_subscriber_list.add(new LightsCommand(_node));
