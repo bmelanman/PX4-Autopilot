@@ -51,6 +51,7 @@
 
 // Outputs
 #include "output_rc.h"
+#include "output.h"
 
 // Subscriptions
 #include <uORB/Subscription.hpp>
@@ -114,7 +115,6 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 	// Initialize test input object to set the initial orientation
 	thread_data.test_input = new InputTest(params);
-	thread_data.test_input->set_test_input(0, 0, 0);
 
 	// Initialize input object(s)
 	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
@@ -201,23 +201,23 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 			}
 
-			// Set stabilization mode
-			switch (params.mnt_do_stab) {
-			case 1:
-				// Always stabilize
-				thread_data.output_obj->set_stabilize(true, true, true);
-				break;
+			// Always stabilize
+			thread_data.output_obj->set_stabilize(true, true, true);
 
-			case 2:
-				// Only stabilize the yaw axis
-				thread_data.output_obj->set_stabilize(false, false, true);
-				break;
-
-			default:
-				// Never stabilize
-				thread_data.output_obj->set_stabilize(false, false, false);
-				break;
-			}
+			//switch (params.mnt_do_stab) {
+			//case 1:
+			//	// Always stabilize
+			// 	thread_data.output_obj->set_stabilize(true, true, true);
+			//	break;
+			//case 2:
+			//	// Only stabilize the yaw axis
+			//	thread_data.output_obj->set_stabilize(false, false, true);
+			//	break;
+			//default:
+			//	// Never stabilize
+			//	thread_data.output_obj->set_stabilize(false, false, false);
+			//	break;
+			//}
 
 			// Update output
 			thread_data.output_obj->update(
@@ -226,6 +226,12 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 			// Publish the mount orientation
 			thread_data.output_obj->publish();
+
+			static int counter = 0;
+
+			if (counter++ % 2000 == 0) {
+				thread_data.output_obj->print_status();
+			}
 
 		}
 
@@ -424,7 +430,7 @@ int test(int argc, char *argv[])
 //! This currently just prints the current orientation of the gimbal and doesn't stop until
 //! the loop is done bc IDK how to stop it manually with CTRL+C
 
-#define NUM_ORIENTATION_UPDATES    ( 100U )
+#define NUM_ORIENTATION_UPDATES    ( 32U )
 #define ORIENTATION_UPDATE_RATE_HZ ( 2U )
 
 //! This will be deleted later

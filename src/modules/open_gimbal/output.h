@@ -44,6 +44,7 @@
 #include <uORB/topics/vehicle_attitude.h>
 #include <uORB/topics/vehicle_global_position.h>
 #include <uORB/topics/vehicle_land_detected.h>
+#include <uORB/topics/gimbal_controls.h>
 
 namespace open_gimbal
 {
@@ -51,6 +52,8 @@ namespace open_gimbal
 class OutputBase
 {
 public:
+
+
 	OutputBase() = delete;
 	explicit OutputBase(const Parameters &parameters);
 	virtual ~OutputBase() = default;
@@ -62,6 +65,10 @@ public:
 	void publish();
 
 	void set_stabilize(bool roll_stabilize, bool pitch_stabilize, bool yaw_stabilize);
+
+	static constexpr uint8_t _INDEX_ROLL = gimbal_controls_s::INDEX_ROLL;
+	static constexpr uint8_t _INDEX_PITCH = gimbal_controls_s::INDEX_PITCH;
+	static constexpr uint8_t _INDEX_YAW = gimbal_controls_s::INDEX_YAW;
 
 protected:
 	float _calculate_pitch(double lon, double lat, float altitude,
@@ -76,7 +83,7 @@ protected:
 
 	void _handle_position_update(const ControlData &control_data, bool force_update = false);
 
-	float _q_setpoint[4] = { NAN, NAN, NAN, NAN }; ///< can be NAN if not specifically set
+	matrix::Quatf _q_setpoint = matrix::Quatf(NAN, NAN, NAN, NAN);   ///< can be NAN if not specifically set
 	float _angle_velocity[3] = { NAN, NAN, NAN }; //< [rad/s], can be NAN if not specifically set
 
 	bool _stabilize[3] = { false, false, false };
@@ -89,6 +96,8 @@ protected:
 	void _calculate_angle_output(const hrt_abstime &t);
 
 	float _angle_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [rad]
+	float _gimbal_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [-1, 1]
+
 	hrt_abstime _last_update;
 
 private:
@@ -97,6 +106,8 @@ private:
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 
 	uORB::Publication<mount_orientation_s> _mount_orientation_pub{ORB_ID(mount_orientation)};
+
+	//float _translate_angle2gimbal(float target_angle, float angle_offset, float angle_limit);
 
 	bool _landed{true};
 };

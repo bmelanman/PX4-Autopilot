@@ -76,15 +76,18 @@ InputTest::UpdateResult InputTest::update(unsigned int timeout_ms, ControlData &
 
 int InputTest::initialize()
 {
+	// Set initial setpoints to 0
+	set_test_input(0, 0, 0);
+
 	return 0;
 }
 
 void InputTest::print_status() const
 {
 	PX4_INFO("Input: Test");
-	PX4_INFO_RAW("  roll : % 3d deg\n", _roll_deg);
-	PX4_INFO_RAW("  pitch: % 3d deg\n", _pitch_deg);
-	PX4_INFO_RAW("  yaw  : % 3d deg\n", _yaw_deg);
+	PX4_INFO_RAW("  Roll : % 4.1d deg\n", _roll_deg);
+	PX4_INFO_RAW("  Pitch: % 4.1d deg\n", _pitch_deg);
+	PX4_INFO_RAW("  Yaw  : % 4.1d deg\n", _yaw_deg);
 }
 
 void InputTest::set_test_input(int roll_deg, int pitch_deg, int yaw_deg)

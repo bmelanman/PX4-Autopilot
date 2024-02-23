@@ -3,9 +3,6 @@
 # board specific defaults
 #------------------------------------------------------------------------------
 
-# Account for board rotation (Roll: 180, Pitch: 0, Yaw: 90)
-param set SYS_RGB_MAXBRT 0.10
-
 #------------------------------------------------------------------------------
 # Commander Paramters
 #------------------------------------------------------------------------------
@@ -29,8 +26,8 @@ param set COM_PREARM_MODE 2
 # Sensor Paramters
 #------------------------------------------------------------------------------
 
-# Account for board rotation (Roll: 270, Pitch: 0, Yaw: 90)
-param set SENS_BOARD_ROT 30
+# Account for board rotation (Roll: 0, Pitch: 0, Yaw: 90)
+param set SENS_BOARD_ROT 2
 
 # Notify if the IMU is clipping
 param set-default SENS_IMU_CLPNOTI 0
@@ -40,12 +37,12 @@ param set SENS_IMU_AUTOCAL 1
 param set SENS_IMU_MODE 1
 
 # Configure the Gyroscope
-param set IMU_GYRO_CAL_EN 1
-param set CAL_GYRO0_PRIO 50 # Default
+#param set IMU_GYRO_CAL_EN 1
+#param set CAL_GYRO0_PRIO 50 # Default
 
 # Configure the Accelerometer
-param set IMU_ACC_CAL_EN 1
-param set CAL_ACC0_PRIO 50 # Default
+#param set IMU_ACC_CAL_EN 1
+#param set CAL_ACC0_PRIO 50 # Default
 
 # Set axis limits
 param set FD_FAIL_P 180
@@ -87,21 +84,28 @@ param set PWM_MAIN_TIM0 400
 param set MNT_DO_STAB 1
 
 # Set gimbal output channels
-param set MNT_MAN_ROLL  1
-param set MNT_MAN_PITCH 2
-param set MNT_MAN_YAW   3
+param set MNT_MAN_ROLL      1
+param set MNT_MAN_PITCH     2
+param set MNT_MAN_YAW       3
 
 # Set input and output to RC
-param set MNT_MODE_IN   1
-param set MNT_MODE_OUT  0
+param set MNT_MODE_IN       0
+param set MNT_MODE_OUT      0
 
-param set MNT_RANGE_ROLL  360
-param set MNT_RANGE_PITCH 360
-param set MNT_RANGE_YAW   360 # Default
+# A limit of [-180, 180] is set by default
+param set MNT_RANGE_ROLL    0
+param set MNT_RANGE_PITCH   0
+param set MNT_RANGE_YAW     0
 
-param set MNT_OFF_ROLL     90
-param set MNT_OFF_PITCH     0
-param set MNT_OFF_YAW     -90 # Default
+param set MNT_OFF_ROLL    -63
+param set MNT_OFF_PITCH   -35
+param set MNT_OFF_YAW       0
+
+# param set SENS_BOARD_ROT 10
+# param set MNT_OFF_ROLL 22.5
+
+# param set SENS_BOARD_ROT 6
+# param set MNT_OFF_ROLL 202.5
 
 #------------------------------------------------------------------------------
 # Start Necessary Services
