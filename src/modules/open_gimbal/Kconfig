@@ -1,6 +1,6 @@
 menuconfig MODULES_OPEN_GIMBAL
 	bool "open_gimbal"
-	default y
+	default n
 	---help---
 		Enable support for OPEN_GIMBAL
 
