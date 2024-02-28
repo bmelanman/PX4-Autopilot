@@ -51,16 +51,16 @@ InputCAN::InputCAN(Parameters &parameters) :
 
 InputCAN::~InputCAN()
 {
-	if (_mount_orientation_sub >= 0) {
-		orb_unsubscribe(_mount_orientation_sub);
+	if (_gimbal_manager_set_attitude_sub >= 0) {
+		orb_unsubscribe(_gimbal_manager_set_attitude_sub);
 	}
 }
 
 int InputCAN::initialize()
 {
-	_mount_orientation_sub = orb_subscribe(ORB_ID(mount_orientation));
+	_gimbal_manager_set_attitude_sub = orb_subscribe(ORB_ID(gimbal_manager_set_attitude));
 
-	if (_mount_orientation_sub < 0) {
+	if (_gimbal_manager_set_attitude_sub < 0) {
 		return -errno;
 	}
 
@@ -70,7 +70,7 @@ int InputCAN::initialize()
 InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &control_data, bool already_active)
 {
 	px4_pollfd_struct_t polls[1];
-	polls[0].fd = 		_mount_orientation_sub;
+	polls[0].fd = 		_gimbal_manager_set_attitude_sub;
 	polls[0].events = 	POLLIN;
 
 	int ret = px4_poll(polls, 1, timeout_ms);
@@ -96,8 +96,8 @@ InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &co
 
 InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlData &control_data, bool already_active)
 {
-	mount_orientation_s mount_orientation{};
-	orb_copy(ORB_ID(mount_orientation), _mount_orientation_sub, &mount_orientation);
+	gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
+	orb_copy(ORB_ID(gimbal_manager_set_attitude), _gimbal_manager_set_attitude_sub, &gimbal_manager_set_attitude);
 	control_data.type = ControlData::Type::Angle;
 
 	// If we were already active previously, we just update normally. Otherwise, there needs to be
@@ -108,12 +108,10 @@ InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlDat
 		//control_data.compid_primary_control = _parameters.mav_compid;
 
 		// We scale manual input from roll -180..180, pitch -90..90, yaw, -180..180 degrees.
-		matrix::Eulerf euler(mount_orientation.attitude_euler_angle[0],
-				     mount_orientation.attitude_euler_angle[1],
-				     mount_orientation.attitude_euler_angle[2]);
 
-		matrix::Quatf q(euler);
-		q.copyTo(control_data.type_data.angle.q);
+		for(int i = 0; i < 4; i++) {
+			contral_data.tpye_data.angle.q[i] = gimbal_manager_set_attitude.q[i];
+		}
 
 		control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
 		control_data.type_data.angle.frames[1] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;

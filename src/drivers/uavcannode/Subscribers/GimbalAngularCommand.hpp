@@ -38,7 +38,7 @@
 #include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
 
 #include <uORB/Publication.hpp>
-#include <uORB/topics/mount_orientation.h>
+#include <uORB/topics/gimbal_manager_set_attitude.h>
 
 namespace uavcannode
 {
@@ -80,17 +80,12 @@ public:
 private:
 	void callback(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand> &msg)
 	{
-		mount_orientation_s mount_orientation{};
-		float quaternion[4];
+		gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
 		for (int i=0;i<4;i++)
-			quaternion[i] = msg.quaternion_xyzw[i];
-		matrix::Quatf quaternion_m(quaternion);
-		matrix::Eulerf euler_gimbal = quaternion_m;
-		for (int i=0;i<3;i++)
-			mount_orientation.attitude_euler_angle[i] = euler_gimbal(i);
-		_mount_orientation_pub.publish(mount_orientation);
+			gimbal_manager_set_attitude.q[i] = msg.quaternion_xyzw[i];
+		_gimbal_manager_set_attitude_pub.publish(gimbal_manager_set_attitude);
 	}
 
-	uORB::Publication<mount_orientation_s> _mount_orientation_pub{ORB_ID(mount_orientation)};
+	uORB::Publication<gimbal_manager_set_attitude_s> _gimbal_manager_set_attitude_pub{ORB_ID(gimbal_manager_set_attitude)};
 };
 } // namespace uavcannode

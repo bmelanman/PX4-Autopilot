@@ -36,7 +36,7 @@
 
 #include "input.h"
 #include "gimbal_params.h"
-#include <uORB/topics/mount_orientation.h>
+#include <uORB/topics/gimbal_manager_set_attitude.h>
 
 namespace open_gimbal
 {
@@ -58,7 +58,7 @@ public:
 private:
 	virtual UpdateResult _read_control_data_from_subscription(ControlData &control_data, bool already_active);
 
-	int _mount_orientation_sub{-1};
+	int _gimbal_manager_set_attitude_sub{-1};
 
 	float _last_set_aux_values[3] {};
 };

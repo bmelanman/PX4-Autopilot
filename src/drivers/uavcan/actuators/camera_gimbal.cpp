@@ -80,3 +80,27 @@ UavcanCameraGimbalController::Run()
 		_uavcan_pub_raw_cmd.broadcast(_cmd);
 	}
 }
+
+void
+UavcanCameraGimbalController::gimbal_status_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::Status> &msg)
+{
+	if (msg.esc_index < esc_status_s::CONNECTED_ESC_MAX) {
+		auto &ref = _esc_status.esc[msg.esc_index];
+
+		ref.timestamp       = hrt_absolute_time();
+		ref.esc_address = msg.getSrcNodeID().get();
+		ref.esc_voltage     = msg.voltage;
+		ref.esc_current     = msg.current;
+		ref.esc_temperature = msg.temperature;
+		ref.esc_rpm         = msg.rpm;
+		ref.esc_errorcount  = msg.error_count;
+
+		_gimbal_status.esc_count = _rotor_count;
+		_gimbal_status.counter += 1;
+		_gimbal_status.esc_connectiontype = esc_status_s::ESC_CONNECTION_TYPE_CAN;
+		_esc_status.esc_online_flags = check_escs_status();
+		_esc_status.esc_armed_flags = (1 << _rotor_count) - 1;
+		_gimbal_status.timestamp = hrt_absolute_time();
+		_gimbal_status_pub.publish(_gimbal_status);
+	}
+}

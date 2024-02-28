@@ -1,0 +1,4 @@
+uint64 timestamp
+uint8 gimbal_device_id
+float32[4] gimbal_setpoints_attitude_output
+uint8 gimbal_status
