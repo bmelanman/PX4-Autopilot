@@ -61,6 +61,10 @@
 #include "Publishers/GnssAuxiliary.hpp"
 #endif // CONFIG_UAVCANNODE_GNSS_FIX
 
+#if defined(CONFIG_UAVCANNODE_INDICATED_AIR_SPEED)
+#include "Publishers/IndicatedAirspeed.hpp"
+#endif // CONFIG_UAVCANNODE_INDICATED_AIR_SPEED
+
 #if defined(CONFIG_UAVCANNODE_MAGNETIC_FIELD_STRENGTH)
 #include "Publishers/MagneticFieldStrength2.hpp"
 #endif // CONFIG_UAVCANNODE_MAGNETIC_FIELD_STRENGTH
@@ -96,6 +100,10 @@
 #if defined(CONFIG_UAVCANNODE_ESC_RAW_COMMAND)
 #include "Subscribers/ESCRawCommand.hpp"
 #endif // CONFIG_UAVCANNODE_ESC_RAW_COMMAND
+
+#if defined(CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND)
+#include "Subscribers/GimbalAngularCommand.hpp"
+#endif // CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND
 
 #if defined(CONFIG_UAVCANNODE_LIGHTS_COMMAND)
 #include "Subscribers/LightsCommand.hpp"
@@ -422,6 +430,10 @@ int UavcanNode::init(uavcan::NodeID node_id, UAVCAN_DRIVER::BusEvent &bus_events
 #if defined(CONFIG_UAVCANNODE_ESC_RAW_COMMAND)
 	_subscriber_list.add(new ESCRawCommand(_node));
 #endif // CONFIG_UAVCANNODE_ESC_RAW_COMMAND
+
+#if defined(CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND)
+	_subscriber_list.add(new GimbalAngularCommand(_node));
+#endif // CONFIG_UAVCANNODE_GIMBAL_ANGULAR_COMMAND
 
 #if defined(CONFIG_UAVCANNODE_LIGHTS_COMMAND)
 	_subscriber_list.add(new LightsCommand(_node));

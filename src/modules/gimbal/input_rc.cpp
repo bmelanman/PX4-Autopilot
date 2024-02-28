@@ -112,7 +112,7 @@ InputRC::UpdateResult InputRC::_read_control_data_from_subscription(ControlData 
 	// Detect a big stick movement
 	const bool major_movement = [&]() {
 		for (int i = 0; i < 3; ++i) {
-			if (fabsf(_last_set_aux_values[i] - new_aux_values[i]) > 0.25f) {
+			if (fabsf(_last_set_aux_values[i] - new_aux_values[i]) > 0.05f) {
 				return true;
 			}
 		}

@@ -47,6 +47,7 @@
 
 // Inputs
 #include "input_rc.h"
+#include "input_can.h"
 #include "input_test.h"
 
 // Outputs
@@ -117,8 +118,8 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	thread_data.test_input = new InputTest(params);
 
 	// Initialize input object(s)
-	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
-	//thread_data.input_objs[thread_data.input_objs_len++] = new InputRC(params);
+	//thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
+	thread_data.input_objs[thread_data.input_objs_len++] = new InputRC(params);
 
 	for (int i = 0; i < thread_data.input_objs_len; ++i) {
 		if (!thread_data.input_objs[i]) {

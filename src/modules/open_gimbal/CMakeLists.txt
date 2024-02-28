@@ -36,6 +36,7 @@ px4_add_module(
 	SRCS
 		input.cpp
 		input_rc.cpp
+		input_can.cpp
 		input_test.cpp
 		output.cpp
 		output_rc.cpp

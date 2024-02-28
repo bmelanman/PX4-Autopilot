@@ -1617,7 +1617,7 @@ PARAM_DEFINE_INT32(RC_MAP_FLTM_BTN, 0);
  * @value 17 Channel 17
  * @value 18 Channel 18
  */
-PARAM_DEFINE_INT32(RC_MAP_AUX1, 0);
+PARAM_DEFINE_INT32(RC_MAP_AUX1, 1);
 
 /**
  * AUX2 Passthrough RC channel
@@ -1647,7 +1647,7 @@ PARAM_DEFINE_INT32(RC_MAP_AUX1, 0);
  * @value 17 Channel 17
  * @value 18 Channel 18
  */
-PARAM_DEFINE_INT32(RC_MAP_AUX2, 0);
+PARAM_DEFINE_INT32(RC_MAP_AUX2, 2);
 
 /**
  * AUX3 Passthrough RC channel
@@ -1677,7 +1677,7 @@ PARAM_DEFINE_INT32(RC_MAP_AUX2, 0);
  * @value 17 Channel 17
  * @value 18 Channel 18
  */
-PARAM_DEFINE_INT32(RC_MAP_AUX3, 0);
+PARAM_DEFINE_INT32(RC_MAP_AUX3, 3);
 
 /**
  * AUX4 Passthrough RC channel
@@ -1705,7 +1705,7 @@ PARAM_DEFINE_INT32(RC_MAP_AUX3, 0);
  * @value 17 Channel 17
  * @value 18 Channel 18
  */
-PARAM_DEFINE_INT32(RC_MAP_AUX4, 0);
+PARAM_DEFINE_INT32(RC_MAP_AUX4, 4);
 
 /**
  * AUX5 Passthrough RC channel

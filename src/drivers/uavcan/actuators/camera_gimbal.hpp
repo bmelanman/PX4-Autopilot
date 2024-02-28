@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2023 PX4 Development Team. All rights reserved.
+ *   Copyright (C) 2014 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,54 +31,58 @@
  *
  ****************************************************************************/
 
+/**
+ * @file camera_gimbal.hpp
+ *
+ * @author Gimbal Guys Team <mtprovin@calpoly.edu>
+ */
+
 #pragma once
 
-#include <matrix/matrix/math.hpp>
+#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+
+#include <uavcan/uavcan.hpp>
+#include <uORB/Subscription.hpp>
+#include <uORB/SubscriptionCallback.hpp>
+
+#include <uORB/topics/mount_orientation.h>
+#include <uORB/PublicationMulti.hpp>
+//#include <uORB/topics/gimbal_status.h>
+#include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
+#include <uavcan/equipment/camera_gimbal/Status.hpp>
+#include <perf/perf_counter.h>
 
 /**
- * @brief Differential Drive Kinematics class for computing the kinematics of a differential drive robot.
- *
- * This class provides functions to set the wheel base and radius, and to compute the inverse kinematics
- * given linear velocity and yaw rate.
+ * @brief The UavcanCameraGimbalController class
  */
-class DifferentialDriveKinematics
+
+class UavcanCameraGimbalController : public px4::ScheduledWorkItem
 {
 public:
-	DifferentialDriveKinematics() = default;
-	~DifferentialDriveKinematics() = default;
+	UavcanCameraGimbalController(uavcan::INode &node);
+	~UavcanCameraGimbalController();
 
-	/**
-	 * @brief Sets the wheel base of the robot.
-	 *
-	 * @param wheel_base The distance between the centers of the wheels.
-	 */
-	void setWheelBase(const float wheel_base) { _wheel_base = wheel_base; };
+	/*
+	* setup callback
+	*/
+	int init();
 
-	/**
-	 * @brief Sets the maximum speed of the robot.
-	 *
-	 * @param max_speed The maximum speed of the robot.
-	 */
-	void setMaxSpeed(const float max_speed) { _max_speed = max_speed; };
+	void Run() override;
 
-	/**
-	 * @brief Sets the maximum angular speed of the robot.
-	 *
-	 * @param max_angular_speed The maximum angular speed of the robot.
-	 */
-	void setMaxAngularVelocity(const float max_angular_velocity) { _max_angular_velocity = max_angular_velocity; };
+	//gimbal_status_s &gimbal_status() {return _gimbal_status;}
 
-	/**
-	 * @brief Computes the inverse kinematics for differential drive.
-	 *
-	 * @param linear_velocity_x Linear velocity along the x-axis.
-	 * @param yaw_rate Yaw rate of the robot.
-	 * @return matrix::Vector2f Motor velocities for the right and left motors.
-	 */
-	matrix::Vector2f computeInverseKinematics(float linear_velocity_x, float yaw_rate);
+	//uORB::PublictionMulti<gimbal_status_s> _gimbal_status_pub{ORB_ID(gimbal_status)};
 
 private:
-	float _wheel_base{0.f};
-	float _max_speed{0.f};
-	float _max_angular_velocity{0.f};
+	uavcan::equipment::camera_gimbal::AngularCommand _cmd;
+
+	uORB::SubscriptionCallbackWorkItem _mount_orientation_sub{this, ORB_ID(mount_orientation)};
+	//void gimbal_status_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::Status> &msg);
+
+	/*
+	 * libuavcan related things
+	 */
+	uavcan::INode							&_node;
+	uavcan::Publisher<uavcan::equipment::camera_gimbal::AngularCommand>	_uavcan_pub_raw_cmd;
+	//uavcan::Subscriber<uavcan::equipment::camera_gimbal::Status> _uavcan_sub_status;
 };

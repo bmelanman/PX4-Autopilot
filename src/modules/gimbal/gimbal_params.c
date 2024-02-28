@@ -51,7 +51,7 @@
 * @group Mount
 * @reboot_required true
 */
-PARAM_DEFINE_INT32(MNT_MODE_IN, -1);
+PARAM_DEFINE_INT32(MNT_MODE_IN, 1);
 
 /**
 * Mount output mode
@@ -102,7 +102,7 @@ PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
 * @max 6
 * @group Mount
 */
-PARAM_DEFINE_INT32(MNT_MAN_ROLL, 0);
+PARAM_DEFINE_INT32(MNT_MAN_ROLL, 1);
 
 /**
 * Auxiliary channel to control pitch (in AUX input or manual mode).
@@ -118,7 +118,7 @@ PARAM_DEFINE_INT32(MNT_MAN_ROLL, 0);
 * @max 6
 * @group Mount
 */
-PARAM_DEFINE_INT32(MNT_MAN_PITCH, 0);
+PARAM_DEFINE_INT32(MNT_MAN_PITCH, 2);
 
 /**
 * Auxiliary channel to control yaw (in AUX input or manual mode).
@@ -134,7 +134,7 @@ PARAM_DEFINE_INT32(MNT_MAN_PITCH, 0);
 * @max 6
 * @group Mount
 */
-PARAM_DEFINE_INT32(MNT_MAN_YAW, 0);
+PARAM_DEFINE_INT32(MNT_MAN_YAW, 3);
 
 /**
 * Stabilize the mount
@@ -251,7 +251,7 @@ PARAM_DEFINE_FLOAT(MNT_RATE_YAW, 30.0f);
  * @max 1
  * @group Mount
  */
-PARAM_DEFINE_INT32(MNT_RC_IN_MODE, 1);
+PARAM_DEFINE_INT32(MNT_RC_IN_MODE, 0);
 
 /**
 * Pitch minimum when landed

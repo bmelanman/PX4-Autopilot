@@ -157,6 +157,7 @@ px4_add_module(
 
 		# Actuators
 		actuators/esc.cpp
+		actuators/camera_gimbal.cpp
 		actuators/hardpoint.cpp
 		actuators/servo.cpp
 
