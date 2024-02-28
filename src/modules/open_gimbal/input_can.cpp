@@ -104,14 +104,11 @@ InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlDat
 	// a major stick movement to re-activate manual (or it's running for the very first time).
 
 	if (already_active) {
-		//control_data.sysid_primary_control = _parameters.mav_sysid;
-		//control_data.compid_primary_control = _parameters.mav_compid;
 
-		// We scale manual input from roll -180..180, pitch -90..90, yaw, -180..180 degrees.
-
-		for(int i = 0; i < 4; i++) {
-			control_data.type_data.angle.q[i] = gimbal_manager_set_attitude.q[i];
-		}
+		//for (int i = 0; i < 4; i++) {
+		//	control_data.type_data.angle.q[i] = gimbal_manager_set_attitude.q[i];
+		//}
+		(matrix::Quatf(gimbal_manager_set_attitude.q)).copyTo(control_data.type_data.angle.q);
 
 		control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
 		control_data.type_data.angle.frames[1] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;

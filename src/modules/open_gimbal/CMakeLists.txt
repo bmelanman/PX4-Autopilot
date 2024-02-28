@@ -35,7 +35,6 @@ px4_add_module(
 	COMPILE_FLAGS
 	SRCS
 		input.cpp
-		input_rc.cpp
 		input_can.cpp
 		input_test.cpp
 		output.cpp

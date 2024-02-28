@@ -71,17 +71,12 @@ public:
 	static constexpr uint8_t _INDEX_YAW = gimbal_controls_s::INDEX_YAW;
 
 protected:
-	float _calculate_pitch(double lon, double lat, float altitude,
-			       const vehicle_global_position_s &global_position);
-
 	MapProjection _projection_reference{}; ///< class to convert (lon, lat) to local [m]
 
 	const Parameters &_parameters;
 
 	/** set angle setpoints, speeds & stabilize flags */
 	void _set_angle_setpoints(const ControlData &control_data);
-
-	void _handle_position_update(const ControlData &control_data, bool force_update = false);
 
 	matrix::Quatf _q_setpoint = matrix::Quatf(NAN, NAN, NAN, NAN);   ///< can be NAN if not specifically set
 	float _angle_velocity[3] = { NAN, NAN, NAN }; //< [rad/s], can be NAN if not specifically set

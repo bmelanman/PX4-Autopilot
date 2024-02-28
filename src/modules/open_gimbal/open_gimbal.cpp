@@ -31,9 +31,6 @@
  *
  ****************************************************************************/
 
-// TODO:
-// :- Enable DEBUG_APPLICATION_INPLACE
-
 #include <cstdint>
 #include <stdlib.h>
 #include <string.h>
@@ -118,8 +115,8 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	thread_data.test_input = new InputTest(params);
 
 	// Initialize input object(s)
-	//thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
-	thread_data.input_objs[thread_data.input_objs_len++] = new InputRC(params);
+	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
+	thread_data.input_objs[thread_data.input_objs_len++] = new InputCAN(params);
 
 	for (int i = 0; i < thread_data.input_objs_len; ++i) {
 		if (!thread_data.input_objs[i]) {
@@ -228,11 +225,11 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			// Publish the mount orientation
 			thread_data.output_obj->publish();
 
-			static int counter = 0;
+			//static int counter = 0;
 
-			if (counter++ % 2000 == 0) {
-				thread_data.output_obj->print_status();
-			}
+			//if (counter++ % 2000 == 0) {
+			//	thread_data.output_obj->print_status();
+			//}
 
 		}
 
