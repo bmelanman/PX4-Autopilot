@@ -110,7 +110,7 @@ InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlDat
 		// We scale manual input from roll -180..180, pitch -90..90, yaw, -180..180 degrees.
 
 		for(int i = 0; i < 4; i++) {
-			contral_data.tpye_data.angle.q[i] = gimbal_manager_set_attitude.q[i];
+			control_data.type_data.angle.q[i] = gimbal_manager_set_attitude.q[i];
 		}
 
 		control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;

@@ -74,7 +74,7 @@ public:
 		printf("\t%s:%d -> %s\n",
 		       uavcan::equipment::camera_gimbal::AngularCommand::getDataTypeFullName(),
 		       uavcan::equipment::camera_gimbal::AngularCommand::DefaultDataTypeID,
-		       _mount_orientation_pub.get_topic()->o_name);
+		       _gimbal_manager_set_attitude_pub.get_topic()->o_name);
 	}
 
 private:
