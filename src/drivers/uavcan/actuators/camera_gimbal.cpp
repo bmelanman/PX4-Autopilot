@@ -80,7 +80,7 @@ UavcanCameraGimbalController::Run()
 		_uavcan_pub_raw_cmd.broadcast(_cmd);
 	}
 }
-
+/*
 void
 UavcanCameraGimbalController::gimbal_status_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::Status> &msg)
 {
@@ -104,3 +104,4 @@ UavcanCameraGimbalController::gimbal_status_sub_cb(const uavcan::ReceivedDataStr
 		_gimbal_status_pub.publish(_gimbal_status);
 	}
 }
+*/
