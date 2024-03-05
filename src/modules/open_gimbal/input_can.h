@@ -35,8 +35,6 @@
 #pragma once
 
 #include "input.h"
-#include "gimbal_params.h"
-#include <uORB/topics/gimbal_manager_set_attitude.h>
 
 namespace open_gimbal
 {

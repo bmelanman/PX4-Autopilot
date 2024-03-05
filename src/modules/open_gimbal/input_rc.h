@@ -35,7 +35,6 @@
 #pragma once
 
 #include "input.h"
-#include "gimbal_params.h"
 #include <uORB/topics/manual_control_setpoint.h>
 
 namespace open_gimbal

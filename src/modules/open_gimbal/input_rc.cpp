@@ -34,10 +34,12 @@
 
 #include "input_rc.h"
 
-#include <math.h>
 #include <errno.h>
+
+#include <math.h>
 #include <mathlib/mathlib.h>
 #include <matrix/matrix/math.hpp>
+
 #include <px4_platform_common/posix.h>
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/log.h>

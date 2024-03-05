@@ -34,13 +34,17 @@
 
 #include "input_can.h"
 
-#include <math.h>
 #include <errno.h>
+
+#include <math.h>
 #include <mathlib/mathlib.h>
 #include <matrix/matrix/math.hpp>
+
 #include <px4_platform_common/posix.h>
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/log.h>
+
+#include <uORB/topics/gimbal_manager_set_attitude.h>
 
 namespace open_gimbal
 {
@@ -117,6 +121,8 @@ InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlDat
 		control_data.type_data.angle.angular_velocity[0] = NAN;
 		control_data.type_data.angle.angular_velocity[1] = NAN;
 		control_data.type_data.angle.angular_velocity[2] = NAN;
+
+		PX4_INFO("Received new gimbal attitude from InputCAN!");
 
 		return UpdateResult::UpdatedActive;
 
