@@ -4,33 +4,14 @@
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
-# Commander Paramters
-#------------------------------------------------------------------------------
-
-# Disable mag strength check
-param set COM_ARM_MAG_STR 0
-# Disable SD card check
-param set COM_ARM_SDCARD 0
-# Disable CPU check
-param set COM_CPU_MAX -1
-# Disable all power checks
-param set CBRK_SUPPLY_CHK 894281
-
-# Allow arming without GPS
-param set COM_ARM_WO_GPS 1
-
-# Set the prearmed state to 2 (always)
-param set COM_PREARM_MODE 2
-
-#------------------------------------------------------------------------------
-# Sensor Paramters
+# Sensor Paramters and Attitude Estimator Module
 #------------------------------------------------------------------------------
 
 # Account for board rotation (Roll: 0, Pitch: 0, Yaw: 90)
 param set SENS_BOARD_ROT 2
 
 # Notify if the IMU is clipping
-param set-default SENS_IMU_CLPNOTI 0
+param set SENS_IMU_CLPNOTI 0
 
 # Configure the IMU
 param set SENS_IMU_AUTOCAL 1
@@ -48,36 +29,80 @@ param set SENS_IMU_MODE 1
 param set FD_FAIL_P 180
 param set FD_FAIL_R 180
 
+## Start ECL/EKF2
+#ekf2 start
+
+# Start the attitude estimator
+attitude_estimator_q start
+
 #------------------------------------------------------------------------------
-# PWM Output Paramters
+# Commander Module
+#------------------------------------------------------------------------------
+
+# Disable mag strength check
+param set COM_ARM_MAG_STR 0
+# Disable SD card check
+param set COM_ARM_SDCARD 0
+# Disable CPU check
+param set COM_CPU_MAX -1
+# Disable all power checks
+param set CBRK_SUPPLY_CHK 894281
+
+# Allow arming without GPS
+param set COM_ARM_WO_GPS 1
+
+# Set the prearmed state to 2 (always)
+param set COM_PREARM_MODE 2
+
+# Start the commander module
+commander start
+
+#------------------------------------------------------------------------------
+# PWM Output Module
 #------------------------------------------------------------------------------
 
 # PWM AUX Ch. 1 -> Gimbal Roll
-param set PWM_MAIN_FUNC1 420
-param set PWM_MAIN_MIN1  1000 # Default
-param set PWM_MAIN_MAX1  2000 # Default
-param set PWM_MAIN_DIS1  1000 # Default
-param set PWM_MAIN_FAIL1 -1   # Default
+param set PWM_AUX_FUNC1 420
+param set PWM_AUX_MIN1  1000 # Default
+param set PWM_AUX_MAX1  2000 # Default
+param set PWM_AUX_DIS1  1000 # Default
+param set PWM_AUX_FAIL1 -1   # Default
 
 # PWM AUX Ch. 2 -> Gimbal Pitch
-param set PWM_MAIN_FUNC2 421
-param set PWM_MAIN_MIN2  1000 # Default
-param set PWM_MAIN_MAX2  2000 # Default
-param set PWM_MAIN_DIS2  1000 # Default
-param set PWM_MAIN_FAIL2 -1   # Default
+param set PWM_AUX_FUNC2 421
+param set PWM_AUX_MIN2  1000 # Default
+param set PWM_AUX_MAX2  2000 # Default
+param set PWM_AUX_DIS2  1000 # Default
+param set PWM_AUX_FAIL2 -1   # Default
 
 # PWM AUX Ch. 3 -> Gimbal Yaw
-param set PWM_MAIN_FUNC3 422
-param set PWM_MAIN_MIN3  1000 # Default
-param set PWM_MAIN_MAX3  2000 # Default
-param set PWM_MAIN_DIS3  1000 # Default
-param set PWM_MAIN_FAIL3 -1   # Default
+param set PWM_AUX_FUNC3 422
+param set PWM_AUX_MIN3  1000 # Default
+param set PWM_AUX_MAX3  2000 # Default
+param set PWM_AUX_DIS3  1000 # Default
+param set PWM_AUX_FAIL3 -1   # Default
 
 # Set PWM Speed to 400Hz
-param set PWM_MAIN_TIM0 400
+param set PWM_AUX_TIM0 400
+
+# Start the PWM output driver module
+pwm_out start
 
 #------------------------------------------------------------------------------
-# Open-Gimbal Paramters
+# MavLink Module
+#------------------------------------------------------------------------------
+
+# Set the MavLink system ID
+param set MAV_SYS_ID 2
+
+# Set the MavLink component ID
+param set MAV_COMP_ID
+
+# Start the MavLink module
+mavlink start -d /dev/ttyS1 -b 57600 -m gimbal
+
+#------------------------------------------------------------------------------
+# Open-Gimbal Module
 #------------------------------------------------------------------------------
 
 # Enable stabilisation
@@ -97,8 +122,8 @@ param set MNT_RANGE_ROLL    0
 param set MNT_RANGE_PITCH   0
 param set MNT_RANGE_YAW     0
 
-param set MNT_OFF_ROLL    -63
-param set MNT_OFF_PITCH   -35
+param set MNT_OFF_ROLL      0
+param set MNT_OFF_PITCH     0
 param set MNT_OFF_YAW       0
 
 # param set SENS_BOARD_ROT 10
@@ -106,19 +131,6 @@ param set MNT_OFF_YAW       0
 
 # param set SENS_BOARD_ROT 6
 # param set MNT_OFF_ROLL 202.5
-
-#------------------------------------------------------------------------------
-# Start Necessary Services
-#------------------------------------------------------------------------------
-
-# Start the PWM output driver
-pwm_out start
-
-# Start commander
-commander start
-
-# Start ECL/EKF2
-ekf2 start
 
 # Start Open-Gimbal
 open_gimbal start
