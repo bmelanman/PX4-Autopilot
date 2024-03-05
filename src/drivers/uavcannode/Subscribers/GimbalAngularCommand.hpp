@@ -80,6 +80,7 @@ public:
 private:
 	void callback(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand> &msg)
 	{
+		PX4_INFO("Received gimbal_manager_set_attitude message");
 		gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
 		for (int i=0;i<4;i++)
 			gimbal_manager_set_attitude.q[i] = msg.quaternion_xyzw[i];
