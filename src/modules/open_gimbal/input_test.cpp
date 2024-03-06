@@ -48,7 +48,7 @@ InputTest::InputTest(Parameters &parameters) :
 
 InputTest::UpdateResult InputTest::update(unsigned int timeout_ms, ControlData &control_data, bool already_active)
 {
-	if (!_has_been_set.load()) {
+	if (!_new_input_available.load()) {
 		return UpdateResult::NoUpdate;
 	}
 
@@ -70,7 +70,8 @@ InputTest::UpdateResult InputTest::update(unsigned int timeout_ms, ControlData &
 	control_data.type_data.angle.angular_velocity[1] = NAN;
 	control_data.type_data.angle.angular_velocity[2] = NAN;
 
-	_has_been_set.store(false);
+	_new_input_available.store(false);
+
 	return UpdateResult::UpdatedActive;
 }
 
@@ -96,7 +97,7 @@ void InputTest::set_test_input(int roll_deg, int pitch_deg, int yaw_deg)
 	_pitch_deg = pitch_deg;
 	_yaw_deg = yaw_deg;
 
-	_has_been_set.store(true);
+	_new_input_available.store(true);
 }
 
 } /* namespace open_gimbal */

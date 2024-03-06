@@ -57,7 +57,7 @@ private:
 	int _pitch_deg {0};
 	int _yaw_deg {0};
 
-	px4::atomic<bool> _has_been_set {false};
+	px4::atomic<bool> _new_input_available {false};
 };
 
 
