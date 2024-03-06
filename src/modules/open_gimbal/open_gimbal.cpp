@@ -31,11 +31,14 @@
  *
  ****************************************************************************/
 
-#include <cstdint>
 #include <stdlib.h>
 #include <string.h>
+#include <cstdint>
+
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/tasks.h>
+#include <px4_platform_common/module.h>
+#include <px4_platform_common/atomic.h>
 
 #include <matrix/matrix/math.hpp>
 
@@ -43,22 +46,15 @@
 #include "gimbal_params.h"
 
 // Inputs
-#include "input_rc.h"
 #include "input_can.h"
 #include "input_test.h"
 
 // Outputs
 #include "output_rc.h"
-#include "output.h"
 
-// Subscriptions
-#include <uORB/Subscription.hpp>
+// uORB Subscriptions
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/parameter_update.h>
-#include <uORB/topics/vehicle_attitude.h>
-
-#include <px4_platform_common/module.h>
-#include <px4_platform_common/atomic.h>
 
 // Polling refresh rate in microseconds
 #define REFRESH_RATE_US ( 100U )
@@ -82,12 +78,21 @@ struct ThreadData {
 
 static ThreadData *g_thread_data = nullptr;
 
+// Subscribe to VehicleAttitude
+uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+vehicle_attitude_s vehicle_attitude{};
+
 static void usage();
 static void update_params(ParameterHandles &param_handles, Parameters &params);
 static bool initialize_params(ParameterHandles &param_handles, Parameters &params);
 
 static int open_gimbal_thread_main(int argc, char *argv[]);
 extern "C" __EXPORT int open_gimbal_main(int argc, char *argv[]);
+
+static bool _get_vehicle_attitude(vehicle_attitude_s &_vehicle_attitude)
+{
+	return _vehicle_attitude_sub.copy(&_vehicle_attitude);
+}
 
 static int open_gimbal_thread_main(int argc, char *argv[])
 {
@@ -146,24 +151,43 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		thread_should_exit.store(true);
 	};
 
+	// Wait up to 10 seconds for the vehicle attitude to initialize
+	int counter = 0;
+
+	while (!thread_should_exit.load() && counter < 100) {
+
+		// Check vehicle attitude
+		if (_get_vehicle_attitude(vehicle_attitude)) {
+			break;
+		}
+
+		px4_usleep(100000);
+		++counter;
+	}
+
+	static bool new_setpoints = false;
+
+	static InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
+
 	PX4_INFO("Initialization complete!");
 
 	while (!thread_should_exit.load()) {
 
-		const bool updated = parameter_update_sub.updated();
-
-		if (updated) {
+		// Check for parameter updates
+		if (parameter_update_sub.updated()) {
 			parameter_update_s pupdate;
 			parameter_update_sub.copy(&pupdate);
+
 			update_params(param_handles, params);
 		}
 
-		if (thread_data.last_input_active == -1) {
-			// Reset control as no one is active anymore, or yet.
-			thread_data.control_data.device_compid = 0;
-		}
+		//if (thread_data.last_input_active == -1) {
+		//	// Reset control as no one is active anymore, or yet.
+		//	thread_data.control_data.device_compid = 0;
+		//}
 
-		InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
+		new_setpoints = false;
+		update_result = InputBase::UpdateResult::NoUpdate;
 
 		if (thread_data.input_objs_len > 0) {
 
@@ -174,25 +198,19 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 				const bool already_active = (thread_data.last_input_active == i);
 				// poll only on active input to reduce latency, or on all if none is active
-				const unsigned int poll_timeout =
-					(already_active || thread_data.last_input_active == -1) ? 20 : 0;
+				const unsigned int poll_timeout = (already_active || thread_data.last_input_active == -1) ? 20 : 0;
 
 				// Update input
 				update_result = thread_data.input_objs[i]->update(poll_timeout, thread_data.control_data, already_active);
 
 				// Check if we need to switch to a different input
-				if (update_result == InputBase::UpdateResult::NoUpdate) {
-					if (already_active) {
-						// No longer active.
-						thread_data.last_input_active = -1;
-					}
+				if (update_result == InputBase::UpdateResult::NoUpdate && already_active) {
+					// No longer active.
+					thread_data.last_input_active = -1;
 
 				} else if (update_result == InputBase::UpdateResult::UpdatedActive) {
 					thread_data.last_input_active = i;
-					break;
-
-				} else if (update_result == InputBase::UpdateResult::UpdatedActiveOnce) {
-					thread_data.last_input_active = -1;
+					new_setpoints = true;
 					break;
 
 				} // Else ignore, input not active
@@ -200,37 +218,16 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			}
 
 			// Always stabilize
-			thread_data.output_obj->set_stabilize(true, true, true);
-
-			//switch (params.mnt_do_stab) {
-			//case 1:
-			//	// Always stabilize
-			// 	thread_data.output_obj->set_stabilize(true, true, true);
-			//	break;
-			//case 2:
-			//	// Only stabilize the yaw axis
-			//	thread_data.output_obj->set_stabilize(false, false, true);
-			//	break;
-			//default:
-			//	// Never stabilize
-			//	thread_data.output_obj->set_stabilize(false, false, false);
-			//	break;
-			//}
+			//thread_data.output_obj->set_stabilize(true, true, true);
 
 			// Update output
-			thread_data.output_obj->update(
-				thread_data.control_data,
-				update_result != InputBase::UpdateResult::NoUpdate, thread_data.control_data.device_compid);
+			if (thread_data.output_obj->update(thread_data.control_data, new_setpoints) == PX4_ERROR) {
+				PX4_ERR("Output update failed, exiting gimbal thread...");
+				thread_should_exit.store(true);
+			}
 
 			// Publish the mount orientation
 			thread_data.output_obj->publish();
-
-			//static int counter = 0;
-
-			//if (counter++ % 2000 == 0) {
-			//	thread_data.output_obj->print_status();
-			//}
-
 		}
 
 		// Wait for a bit before the next loop
@@ -425,64 +422,84 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
-//! This currently just prints the current orientation of the gimbal and doesn't stop until
-//! the loop is done bc IDK how to stop it manually with CTRL+C
+// quaternion order: q0 -> w, q1 -> x, q2 -> y, q3 -> z
+#define _get_quat_roll(q) ( atan2f( 2.0f * (q(0) * q(1) + q(2) * q(3)), 1.0f - 2.0f * (q(1) * q(1) + q(2) * q(2)) ) )
+#define _get_quat_pitch(q) ( asinf( 2.0f * (q(0) * q(2) - q(3) * q(1)) ) )
+#define _get_quat_yaw(q) ( atan2f( 2.0f * (q(0) * q(3) + q(1) * q(2)), 1.0f - 2.0f * (q(2) * q(2) + q(3) * q(3)) ) )
 
-#define NUM_ORIENTATION_UPDATES    ( 32U )
-#define ORIENTATION_UPDATE_RATE_HZ ( 2U )
+void _print_quat(const matrix::Quatf &q)
+{
+	// Convert the quaternion to Euler angles
+	matrix::Eulerf euler_angles(q);
+
+	// Convert the quaternion to Axis-Angles
+	matrix::AxisAnglef axis_angles(q);
+
+	PX4_INFO_RAW("Quaternion Form\n");
+	PX4_INFO_RAW("  q0: %8.4f \n", (double)q(0));
+	PX4_INFO_RAW("  q1: %8.4f \n", (double)q(1));
+	PX4_INFO_RAW("  q2: %8.4f \n", (double)q(2));
+	PX4_INFO_RAW("  q3: %8.4f \n", (double)q(3));
+	PX4_INFO_RAW("\n");
+
+	PX4_INFO_RAW("Euler Angle Form (deg)\n");
+	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(euler_angles(0) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(euler_angles(1) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(euler_angles(2) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("\n");
+
+	PX4_INFO_RAW("Axis-Angle Form (deg)\n");
+	PX4_INFO_RAW("  x: %8.4f \n", (double)(axis_angles(0) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  y: %8.4f \n", (double)(axis_angles(1) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  z: %8.4f \n", (double)(axis_angles(2) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  r: %8.4f \n", (double)(axis_angles.angle() * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("\n");
+
+	PX4_INFO_RAW("Converted Form? (deg)\n");
+	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(_get_quat_roll(q) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(_get_quat_pitch(q) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(_get_quat_yaw(q) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("\n");
+
+}
 
 //! This will be deleted later
 int get_orientation(int argc, char *argv[])
 {
-	// Subscribe to VehicleAttitude
-	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	// Get the current vehicle attitude
+	if (_get_vehicle_attitude(vehicle_attitude)) {
 
-	vehicle_attitude_s vehicle_attitude{};
+		// Convert to a matrix::Quaternion
+		matrix::Quatf q(
+			vehicle_attitude.q[0],
+			vehicle_attitude.q[1],
+			vehicle_attitude.q[2],
+			vehicle_attitude.q[3]
+		);
 
-	unsigned int i;
-	float roll, pitch, yaw;
-	matrix::Quaternion<double> q;
-	matrix::Euler<double> euler_angles;
+		PX4_INFO_RAW("\n");
 
-	for (i = 0; i < NUM_ORIENTATION_UPDATES; i++) {
+		// Print the Euler angles
+		PX4_INFO_RAW("/* Vehicle Attitude Quaternion ****************/\n\n");
 
-		// Get the current vehicle attitude
-		if (_vehicle_attitude_sub.copy(&vehicle_attitude)) {
+		_print_quat(q);
 
-			// Convert to a matrix::Quaternion
-			q = matrix::Quaternion<double>(
-				    vehicle_attitude.q[0],
-				    vehicle_attitude.q[1],
-				    vehicle_attitude.q[2],
-				    vehicle_attitude.q[3]
-			    );
+		PX4_INFO_RAW("/* Setpoint Quaternion ************************/\n\n");
 
-			// Convert the quaternion to Euler angles
-			euler_angles = matrix::Euler<double>(q);
+		_print_quat(g_thread_data->output_obj->_get_q_setpoint());
 
-			// Convert to degrees
-			roll = euler_angles(0) * 180 / M_PI;
-			pitch = euler_angles(1) * 180 / M_PI;
-			yaw = euler_angles(2) * 180 / M_PI;
+		PX4_INFO_RAW("/* Output Angles ******************************/\n\n");
 
-			// Move the cursor to the top and clear the screen
-			printf("\033[1;1H\033[2J");
+		PX4_INFO_RAW("Motor Output:\n");
+		PX4_INFO_RAW("  Roll:  %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs[0]);
+		PX4_INFO_RAW("  Pitch: %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs[1]);
+		PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs[2]);
+		PX4_INFO_RAW("\n");
 
-			// Print the Euler angles
-			PX4_INFO(
-				"Current Orientation (deg):	\n"
-				"Roll:  %8.4f			\n"
-				"Pitch: %8.4f			\n"
-				"Yaw:   %8.4f			\n",
-				(double)roll, (double)pitch, (double)yaw
-			);
+		PX4_INFO_RAW("/**********************************************/\n\n");
 
-		} else {
-			PX4_ERR("Error getting vehicle attitude! :(");
-		}
-
-		// Wait for the next update
-		px4_usleep(1000000 / ORIENTATION_UPDATE_RATE_HZ);
+	} else {
+		PX4_ERR("Error getting vehicle attitude! :(");
 	}
 
 	return PX4_OK;
@@ -540,10 +557,10 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_off_roll, &params.mnt_off_roll);
 	param_get(param_handles.mnt_off_yaw, &params.mnt_off_yaw);
 
-	//param_get(param_handles.mav_sysid, &params.mav_sysid);
-	//param_get(param_handles.mav_compid, &params.mav_compid);
-	params.mav_sysid = 0;
-	params.mav_compid = 0;
+	param_get(param_handles.mav_sysid, &params.mav_sysid);
+	param_get(param_handles.mav_compid, &params.mav_compid);
+	//params.mav_sysid = 0;
+	//params.mav_compid = 0;
 
 	param_get(param_handles.mnt_rate_pitch, &params.mnt_rate_pitch);
 	param_get(param_handles.mnt_rate_yaw, &params.mnt_rate_yaw);
