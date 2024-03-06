@@ -51,6 +51,7 @@
 * @group Mount
 * @reboot_required true
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MODE_IN, -1);
 
 /**
@@ -68,6 +69,7 @@ PARAM_DEFINE_INT32(MNT_MODE_IN, -1);
 * @group Mount
 * @reboot_required true
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MODE_OUT, 0);
 
 /**
@@ -77,6 +79,7 @@ PARAM_DEFINE_INT32(MNT_MODE_OUT, 0);
 *
 * @group Mount
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MAV_SYSID, 1);
 
 /**
@@ -86,6 +89,7 @@ PARAM_DEFINE_INT32(MNT_MAV_SYSID, 1);
 *
 * @group Mount
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
 
 /**
@@ -102,6 +106,7 @@ PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
 * @max 6
 * @group Mount
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MAN_ROLL, 0);
 
 /**
@@ -118,6 +123,7 @@ PARAM_DEFINE_INT32(MNT_MAN_ROLL, 0);
 * @max 6
 * @group Mount
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MAN_PITCH, 0);
 
 /**
@@ -134,6 +140,7 @@ PARAM_DEFINE_INT32(MNT_MAN_PITCH, 0);
 * @max 6
 * @group Mount
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_MAN_YAW, 0);
 
 /**
@@ -150,6 +157,7 @@ PARAM_DEFINE_INT32(MNT_MAN_YAW, 0);
 * @max 2
 * @group Mount
 */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_DO_STAB, 0);
 
 /**
@@ -228,6 +236,7 @@ PARAM_DEFINE_FLOAT(MNT_OFF_YAW, 0.0f);
  * @unit deg/s
  * @group Mount
  */
+// TODO: Remove?
 PARAM_DEFINE_FLOAT(MNT_RATE_PITCH, 30.0f);
 
 /**
@@ -251,6 +260,7 @@ PARAM_DEFINE_FLOAT(MNT_RATE_YAW, 30.0f);
  * @max 1
  * @group Mount
  */
+// TODO: Remove?
 PARAM_DEFINE_INT32(MNT_RC_IN_MODE, 1);
 
 /**

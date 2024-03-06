@@ -65,6 +65,7 @@ struct ControlData {
 			} frames[3];
 		} angle;
 
+		// TODO: Remove?
 		struct TypeLonLat {
 			double lon; // longitude in deg
 			double lat; // latitude in deg
@@ -78,11 +79,9 @@ struct ControlData {
 
 	Type type = Type::Neutral;
 
-	//uint8_t sysid_primary_control = 0; // The MAVLink system ID selected to be in control, 0 for no one.
-	//uint8_t compid_primary_control = 0; // The MAVLink component ID selected to be in control, 0 for no one.
-	// uint8_t sysid_secondary_control = 0; // The MAVLink system ID selected for additional input, not implemented yet.
-	// uint8_t compid_secondary_control = 0; // The MAVLink component ID selected for additional input, not implemented yet.
+	// TODO: Remove?
 	uint8_t device_compid = 0;
+	uint8_t device_sysid = 0;
 };
 
 

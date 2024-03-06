@@ -48,7 +48,6 @@ public:
 	enum class UpdateResult {
 		NoUpdate,
 		UpdatedActive,
-		UpdatedActiveOnce,
 		UpdatedNotActive,
 	};
 
