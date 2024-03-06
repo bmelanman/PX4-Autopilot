@@ -36,8 +36,6 @@
 
 #include "output.h"
 
-#include <uORB/Publication.hpp>
-#include <uORB/topics/gimbal_controls.h>
 #include <uORB/topics/gimbal_device_attitude_status.h>
 
 namespace open_gimbal
@@ -50,7 +48,7 @@ public:
 	explicit OutputRC(const Parameters &parameters);
 	virtual ~OutputRC() = default;
 
-	virtual void update(const ControlData &control_data, bool new_setpoints, uint8_t &gimbal_device_id);
+	virtual int update(const ControlData &control_data, bool new_setpoints);
 	virtual void print_status() const;
 
 private:

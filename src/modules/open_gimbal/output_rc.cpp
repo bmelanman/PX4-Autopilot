@@ -48,25 +48,26 @@ OutputRC::OutputRC(const Parameters &parameters)
 {
 }
 
-void OutputRC::update(const ControlData &control_data, bool new_setpoints, uint8_t &gimbal_device_id)
+int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 {
 	// Update if we have new setpoints
 	if (new_setpoints) {
-		//_set_angle_setpoints(control_data);
 
 		if (control_data.type == ControlData::Type::Angle) {
 			_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
 
 		} else {
 			PX4_ERR("ControlData type %d not supported", (int)control_data.type);
-			return;
+			return PX4_ERROR;
 		}
 	}
 
 	hrt_abstime t = hrt_absolute_time();
 
 	// Calculate the angle outputs
-	_calculate_angle_output(t);
+	if (_calculate_angle_output(t) == PX4_ERROR) {
+		return PX4_ERROR;
+	}
 
 	// Publish the angle outputs
 	_stream_device_attitude_status();
@@ -82,6 +83,8 @@ void OutputRC::update(const ControlData &control_data, bool new_setpoints, uint8
 	_gimbal_controls_pub.publish(gimbal_controls);
 
 	_last_update = t;
+
+	return PX4_OK;
 }
 
 void OutputRC::print_status() const

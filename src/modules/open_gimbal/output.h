@@ -31,13 +31,14 @@
 *
 ****************************************************************************/
 
-
 #pragma once
 
 #include "common.h"
 #include "gimbal_params.h"
+
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
+
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/mount_orientation.h>
@@ -53,23 +54,24 @@ class OutputBase
 {
 public:
 
-
 	OutputBase() = delete;
 	explicit OutputBase(const Parameters &parameters);
 	virtual ~OutputBase() = default;
 
-	virtual void update(const ControlData &control_data, bool new_setpoints, uint8_t &gimbal_device_id) = 0;
+	virtual int update(const ControlData &control_data, bool new_setpoints) = 0;
 
 	virtual void print_status() const = 0;
 
 	void publish();
 
 	void set_stabilize(bool roll_stabilize, bool pitch_stabilize, bool yaw_stabilize);
+	matrix::Quatf _get_q_setpoint();
 
 	static constexpr uint8_t _INDEX_ROLL = gimbal_controls_s::INDEX_ROLL;
 	static constexpr uint8_t _INDEX_PITCH = gimbal_controls_s::INDEX_PITCH;
 	static constexpr uint8_t _INDEX_YAW = gimbal_controls_s::INDEX_YAW;
 
+	float _angle_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [rad]
 protected:
 	MapProjection _projection_reference{}; ///< class to convert (lon, lat) to local [m]
 
@@ -79,7 +81,6 @@ protected:
 	void _set_angle_setpoints(const ControlData &control_data);
 
 	matrix::Quatf _q_setpoint = matrix::Quatf(NAN, NAN, NAN, NAN);   ///< can be NAN if not specifically set
-	float _angle_velocity[3] = { NAN, NAN, NAN }; //< [rad/s], can be NAN if not specifically set
 
 	bool _stabilize[3] = { false, false, false };
 
@@ -88,9 +89,8 @@ protected:
 	bool _absolute_angle[3] = {true, true, false };
 
 	/** calculate the _angle_outputs (with speed) and stabilize if needed */
-	void _calculate_angle_output(const hrt_abstime &t);
+	int _calculate_angle_output(const hrt_abstime &t);
 
-	float _angle_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [rad]
 	float _gimbal_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [-1, 1]
 
 	hrt_abstime _last_update;

@@ -34,14 +34,11 @@
 
 #include "output.h"
 
-#include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/vehicle_global_position.h>
-#include <uORB/topics/mount_orientation.h>
-#include <px4_platform_common/defines.h>
-#include <lib/geo/geo.h>
 #include <math.h>
 #include <mathlib/mathlib.h>
 #include <matrix/math.hpp>
+
+#include <px4_platform_common/defines.h>
 
 namespace open_gimbal
 {
@@ -50,6 +47,11 @@ OutputBase::OutputBase(const Parameters &parameters)
 	: _parameters(parameters)
 {
 	_last_update = hrt_absolute_time();
+}
+
+matrix::Quatf OutputBase::_get_q_setpoint()
+{
+	return _q_setpoint;
 }
 
 void OutputBase::publish()
@@ -92,7 +94,82 @@ void OutputBase::_set_angle_setpoints(const ControlData &control_data)
 	_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
 }
 
-void OutputBase::_calculate_angle_output(const hrt_abstime &t)
+//inline matrix::Quatf quat_conjugate(const matrix::Quatf q)
+//{
+//	// Conjugate of a quaternion is: q' = ( q0, −q1, −q2, −q3 )
+//	return matrix::Quatf(q(0), -q(1), -q(2), -q(3));
+//}
+
+//inline float quat_normalize(const matrix::Quatf q)
+//{
+//	// Normalize the quaternion
+//	return sqrtf(q(0) * q(0) + q(1) * q(1) + q(2) * q(2) + q(3) * q(3));
+//}
+
+//pitch calc
+//float norq = sqrt( q[0]*q[0] + q[3]*q[3] );
+
+//angleq[0] = q[0]/norq;
+//angleq[1] = 0 ; //x
+//angleq[2] = 0;  //y
+//angleq[3] = q[3]/norq;  //z
+//newqangle = quatProd(quatConjugate(q),angleq);
+
+//norq = sqrt( newqangle[0]*newqangle[0]  +  newqangle[1]*newqangle[1]  );
+
+//angleq[0] =  newqangle[0]/norq;
+//angleq[1] = newqangle[1]/norq;  //z ; //x
+//angleq[2] = 0;  //y
+//angleq[3] = 0;
+
+//newqpitch = quatProd(quatConjugate(newqangle),angleq);
+
+//float _calculate_pitch_from_quaternion(const matrix::Quatf q, float angle, int axis)
+//{
+//	// Normalize the quaternion
+//	float norq = quat_normalize(q);
+
+//	// Calculate the angle quaternion
+//	matrix::Quatf angleq;
+
+//	switch (axis) {
+//	case OutputBase::_INDEX_ROLL:
+//		angleq = matrix::Quatf(q(0) / norq, 0.0f, 0.0f, q(3) / norq);
+//		break;
+
+//	case OutputBase::_INDEX_PITCH:
+//		angleq = matrix::Quatf(q(0) / norq, 0.0f, 0.0f, q(3) / norq);
+//		break;
+
+//	case OutputBase::_INDEX_YAW:
+//		angleq = matrix::Quatf(q(0) / norq, 0.0f, 0.0f, q(3) / norq);
+//		break;
+//	}
+
+//	// Calculate the new quaternion
+//	matrix::Quatf newqangle = quat_conjugate(q) * angleq;
+
+//	// Normalize the new quaternion
+//	norq = quat_normalize(newqangle);
+
+//	switch (axis) {
+//	case OutputBase::_INDEX_ROLL:
+//		angleq = matrix::Quatf(newqangle(0) / norq, newqangle(1) / norq, 0.0f, 0.0f);
+//		break;
+
+//	case OutputBase::_INDEX_PITCH:
+//		angleq = matrix::Quatf(newqangle(0) / norq, 0.0f, newqangle(1) / norq, 0.0f);
+//		break;
+
+//	case OutputBase::_INDEX_YAW:
+//		angleq = matrix::Quatf(newqangle(0) / norq, 0.0f, 0.0f, newqangle(1) / norq);
+//		break;
+//	}
+
+//	return 0.0f;
+//}
+
+int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 {
 	// Check if the vehicle is currently landed
 	//if (_vehicle_land_detected_sub.updated()) {
@@ -104,12 +181,13 @@ void OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	//}
 
 	int i;
+	//static float last_angle[3] = {0.0f, 0.0f, 0.0f};
 
 	// Get the vehicle attitude
 	vehicle_attitude_s vehicle_attitude;
 
 	// Make sure the vehicle attitude is valid
-	if (!_vehicle_attitude_sub.copy(&vehicle_attitude)) {
+	if (!_vehicle_attitude_sub.copy(&vehicle_attitude) || !(matrix::Quatf(vehicle_attitude.q)).isAllFinite()) {
 		PX4_ERR("Failed to get vehicle attitude! :(");
 
 		for (i = 0; i < 3; ++i) {
@@ -117,11 +195,11 @@ void OutputBase::_calculate_angle_output(const hrt_abstime &t)
 			_gimbal_outputs[i] = 0.0f;
 		}
 
-		return;
+		return PX4_ERROR;
 	}
 
 	// Make sure the setpoints are valid
-	if (!((_q_setpoint).isAllFinite())) {
+	if (!_q_setpoint.isAllFinite()) {
 		PX4_ERR("Invalid setpoint quaternions! :(");
 
 		for (i = 0; i < 3; ++i) {
@@ -129,7 +207,7 @@ void OutputBase::_calculate_angle_output(const hrt_abstime &t)
 			_gimbal_outputs[i] = 0.0f;
 		}
 
-		return;
+		return PX4_ERROR;
 	}
 
 	// Convert the vehicle attitude and gimbal setpoint quaternions to euler angles
@@ -161,7 +239,6 @@ void OutputBase::_calculate_angle_output(const hrt_abstime &t)
 
 		// Apply the angle limit if it is within the range (0, pi)
 		if (ranges_rad[i] > 0 && ranges_rad[i] < M_PI_F) {
-			//_gimbal_outputs[i] = math::constrain(_gimbal_outputs[i], -ranges_rad, ranges_rad);
 
 			if (curr_angle > ranges_rad[i]) {
 				curr_angle = ranges_rad[i];
@@ -171,8 +248,8 @@ void OutputBase::_calculate_angle_output(const hrt_abstime &t)
 			}
 		}
 
-		// Add the angle to the output arrays
-		_angle_outputs[i] = curr_angle;
+		// Add the angle in degrees to the outputs array
+		_angle_outputs[i] = curr_angle * M_RAD_TO_DEG_F;
 		// Gimbal output is normalized to the range [-1, 1]
 		_gimbal_outputs[i] = curr_angle / M_PI_F;
 	}
@@ -186,6 +263,8 @@ void OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	//					    _parameters.mnt_range_pitch);
 	//	}
 	//}
+
+	return PX4_OK;
 }
 
 void OutputBase::set_stabilize(bool roll_stabilize, bool pitch_stabilize, bool yaw_stabilize)
