@@ -106,8 +106,7 @@ PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
 * @max 6
 * @group Mount
 */
-// TODO: Remove?
-PARAM_DEFINE_INT32(MNT_MAN_ROLL, 0);
+PARAM_DEFINE_INT32(MNT_MAN_ROLL, 1);
 
 /**
 * Auxiliary channel to control pitch (in AUX input or manual mode).
@@ -123,8 +122,7 @@ PARAM_DEFINE_INT32(MNT_MAN_ROLL, 0);
 * @max 6
 * @group Mount
 */
-// TODO: Remove?
-PARAM_DEFINE_INT32(MNT_MAN_PITCH, 0);
+PARAM_DEFINE_INT32(MNT_MAN_PITCH, 2);
 
 /**
 * Auxiliary channel to control yaw (in AUX input or manual mode).
@@ -140,8 +138,7 @@ PARAM_DEFINE_INT32(MNT_MAN_PITCH, 0);
 * @max 6
 * @group Mount
 */
-// TODO: Remove?
-PARAM_DEFINE_INT32(MNT_MAN_YAW, 0);
+PARAM_DEFINE_INT32(MNT_MAN_YAW, 3);
 
 /**
 * Stabilize the mount
@@ -284,3 +281,18 @@ PARAM_DEFINE_FLOAT(MNT_LND_P_MIN, -90.0f);
 * @group Mount
 */
 PARAM_DEFINE_FLOAT(MNT_LND_P_MAX, 90.0f);
+
+// PID parameters for Roll axis
+PARAM_DEFINE_FLOAT(MNT_ROLL_P, 1.0f);
+PARAM_DEFINE_FLOAT(MNT_ROLL_I, 0.5f);
+PARAM_DEFINE_FLOAT(MNT_ROLL_D, 0.5f);
+
+// PID parameters for Pitch axis
+PARAM_DEFINE_FLOAT(MNT_PITCH_P, 1.0f);
+PARAM_DEFINE_FLOAT(MNT_PITCH_I, 0.5f);
+PARAM_DEFINE_FLOAT(MNT_PITCH_D, 0.5f);
+
+// PID parameters for Yaw axis
+PARAM_DEFINE_FLOAT(MNT_YAW_P, 1.0f);
+PARAM_DEFINE_FLOAT(MNT_YAW_I, 0.5f);
+PARAM_DEFINE_FLOAT(MNT_YAW_D, 0.5f);
