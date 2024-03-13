@@ -34,7 +34,7 @@
 /**
  * @file camera_gimbal.cpp
  *
- * @author Gimbal Guys Team <mtprovin@calpoly.edu>
+ * @author Matthew Province, Gimbal Guys Team <mtprovin@calpoly.edu>
  */
 
 #include "camera_gimbal.hpp"
@@ -68,40 +68,18 @@ void
 UavcanCameraGimbalController::Run()
 {
 	mount_orientation_s mount_orientation;
-	if (_mount_orientation_sub.update(&mount_orientation)){
+
+	if (_mount_orientation_sub.update(&mount_orientation)) {
 		float quaternion[4];
 		float *euler = mount_orientation.attitude_euler_angle;
+
 		matrix::Quatf(matrix::Eulerf(euler[0], euler[1], euler[2])).copyTo(quaternion);
 
 		_cmd.gimbal_id = 0;
-		//_cmd.Mode =
-		for (int i=0; i < 4; i++)
+
+		for (int i = 0; i < 4; i++)
 			_cmd.quaternion_xyzw[i] = quaternion[i];
+
 		_uavcan_pub_raw_cmd.broadcast(_cmd);
 	}
 }
-/*
-void
-UavcanCameraGimbalController::gimbal_status_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::Status> &msg)
-{
-	if (msg.esc_index < esc_status_s::CONNECTED_ESC_MAX) {
-		auto &ref = _esc_status.esc[msg.esc_index];
-
-		ref.timestamp       = hrt_absolute_time();
-		ref.esc_address = msg.getSrcNodeID().get();
-		ref.esc_voltage     = msg.voltage;
-		ref.esc_current     = msg.current;
-		ref.esc_temperature = msg.temperature;
-		ref.esc_rpm         = msg.rpm;
-		ref.esc_errorcount  = msg.error_count;
-
-		_gimbal_status.esc_count = _rotor_count;
-		_gimbal_status.counter += 1;
-		_gimbal_status.esc_connectiontype = esc_status_s::ESC_CONNECTION_TYPE_CAN;
-		_esc_status.esc_online_flags = check_escs_status();
-		_esc_status.esc_armed_flags = (1 << _rotor_count) - 1;
-		_gimbal_status.timestamp = hrt_absolute_time();
-		_gimbal_status_pub.publish(_gimbal_status);
-	}
-}
-*/

@@ -47,7 +47,6 @@
 
 #include <uORB/topics/mount_orientation.h>
 #include <uORB/PublicationMulti.hpp>
-//#include <uORB/topics/gimbal_status.h>
 #include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
 #include <uavcan/equipment/camera_gimbal/Status.hpp>
 #include <perf/perf_counter.h>
@@ -69,20 +68,14 @@ public:
 
 	void Run() override;
 
-	//gimbal_status_s &gimbal_status() {return _gimbal_status;}
-
-	//uORB::PublictionMulti<gimbal_status_s> _gimbal_status_pub{ORB_ID(gimbal_status)};
-
 private:
 	uavcan::equipment::camera_gimbal::AngularCommand _cmd;
 
 	uORB::SubscriptionCallbackWorkItem _mount_orientation_sub{this, ORB_ID(mount_orientation)};
-	//void gimbal_status_sub_cb(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::Status> &msg);
 
 	/*
 	 * libuavcan related things
 	 */
 	uavcan::INode							&_node;
 	uavcan::Publisher<uavcan::equipment::camera_gimbal::AngularCommand>	_uavcan_pub_raw_cmd;
-	//uavcan::Subscriber<uavcan::equipment::camera_gimbal::Status> _uavcan_sub_status;
 };
