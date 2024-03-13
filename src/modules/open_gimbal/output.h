@@ -38,6 +38,7 @@
 
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
+#include <lib/rate_control/rate_control.hpp>
 
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
@@ -81,6 +82,9 @@ protected:
 	void _set_angle_setpoints(const ControlData &control_data);
 
 	matrix::Quatf _q_setpoint = matrix::Quatf(NAN, NAN, NAN, NAN);   ///< can be NAN if not specifically set
+
+	RateControl *rate_controller = nullptr; ///< rate controller for the gimbal
+	hrt_abstime t_prev = 0;
 
 	bool _stabilize[3] = { false, false, false };
 

@@ -53,6 +53,7 @@ int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 	// Update if we have new setpoints
 	if (new_setpoints) {
 
+		// Only support angle setpoints
 		if (control_data.type == ControlData::Type::Angle) {
 			_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
 
@@ -72,7 +73,7 @@ int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 	// Publish the angle outputs
 	_stream_device_attitude_status();
 
-	// _gimbal_outputs and gimbal_controls are in [-1, 1]
+	// Publish the gimbal control outputs
 	gimbal_controls_s gimbal_controls{};
 
 	gimbal_controls.control[OutputBase::_INDEX_ROLL] = _gimbal_outputs[OutputBase::_INDEX_ROLL];
@@ -92,16 +93,16 @@ void OutputRC::print_status() const
 	PX4_INFO("Output: AUX");
 
 	double angles[3] = {
-		(double)(math::degrees(OutputBase::_angle_outputs[OutputBase::_INDEX_ROLL]) + _parameters.mnt_off_roll),
-		(double)(math::degrees(OutputBase::_angle_outputs[OutputBase::_INDEX_PITCH]) + _parameters.mnt_off_pitch),
-		(double)(math::degrees(OutputBase::_angle_outputs[OutputBase::_INDEX_YAW]) + _parameters.mnt_off_yaw)
+		OutputBase::_angle_outputs[OutputBase::_INDEX_ROLL],
+		OutputBase::_angle_outputs[OutputBase::_INDEX_PITCH],
+		OutputBase::_angle_outputs[OutputBase::_INDEX_YAW]
 	};
 
 	// Print the target angles
 	PX4_INFO("Target Angles (deg):");
-	PX4_INFO_RAW("  Roll:  % 4.1f\n", angles[0]);
-	PX4_INFO_RAW("  Pitch: % 4.1f\n", angles[1]);
-	PX4_INFO_RAW("  Yaw:   % 4.1f\n", angles[2]);
+	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)(math::degrees(angles[0])));
+	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)(math::degrees(angles[1])));
+	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)(math::degrees(angles[2])));
 
 	// Print the angles after conversion
 	PX4_INFO("Converted Angles (-1,1):");
@@ -113,24 +114,23 @@ void OutputRC::print_status() const
 
 void OutputRC::_stream_device_attitude_status()
 {
+	// Publish the attitude status
 	gimbal_device_attitude_status_s attitude_status{};
 
 	attitude_status.timestamp = hrt_absolute_time();
 	attitude_status.target_system = 0;
 	attitude_status.target_component = 0;
-	attitude_status.device_flags = gimbal_device_attitude_status_s::DEVICE_FLAGS_NEUTRAL |
-				       gimbal_device_attitude_status_s::DEVICE_FLAGS_ROLL_LOCK |
+	attitude_status.device_flags = gimbal_device_attitude_status_s::DEVICE_FLAGS_NEUTRAL    |
+				       gimbal_device_attitude_status_s::DEVICE_FLAGS_ROLL_LOCK  |
 				       gimbal_device_attitude_status_s::DEVICE_FLAGS_PITCH_LOCK |
 				       gimbal_device_attitude_status_s::DEVICE_FLAGS_YAW_LOCK;
 
 	matrix::Eulerf euler(
-		_gimbal_outputs[0] * 180.0f,
-		_gimbal_outputs[1] * 180.0f,
-		_gimbal_outputs[2] * 180.0f
+		_gimbal_outputs[OutputBase::_INDEX_ROLL] * 180.0f,
+		_gimbal_outputs[OutputBase::_INDEX_PITCH] * 180.0f,
+		_gimbal_outputs[OutputBase::_INDEX_YAW] * 180.0f
 	);
 
-	//matrix::Quatf q(euler);
-	//q.copyTo(attitude_status.q);
 	(matrix::Quatf(euler)).copyTo(attitude_status.q);
 
 	attitude_status.failure_flags = 0;
