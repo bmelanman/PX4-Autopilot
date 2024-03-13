@@ -62,36 +62,40 @@ InputCAN::~InputCAN()
 
 int InputCAN::initialize()
 {
+	// Subscribe to the gimbal_manager_set_attitude topic
 	_gimbal_manager_set_attitude_sub = orb_subscribe(ORB_ID(gimbal_manager_set_attitude));
 
 	if (_gimbal_manager_set_attitude_sub < 0) {
 		return -errno;
 	}
 
-	return 0;
+	return PX4_OK;
 }
 
 InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &control_data, bool already_active)
 {
+	// Set up a pollfd struct
 	px4_pollfd_struct_t polls[1];
 	polls[0].fd = 		_gimbal_manager_set_attitude_sub;
 	polls[0].events = 	POLLIN;
 
+	// Poll for new data from the gimbal_manager_set_attitude topic
 	int ret = px4_poll(polls, 1, timeout_ms);
 
 	if (ret < 0) {
+		// No new data
 		return UpdateResult::NoUpdate;
 	}
 
 	if (ret == 0) {
-		// If we have been active before, we stay active, unless someone steals
-		// the control away.
+		// No new data, but we were active before, so we stay active unless someone steals the control away.
 		if (already_active) {
 			return UpdateResult::UpdatedActive;
 		}
 	}
 
 	if (polls[0].revents & POLLIN) {
+		// New data available!
 		return _read_control_data_from_subscription(control_data, already_active);
 	}
 
@@ -100,18 +104,16 @@ InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &co
 
 InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlData &control_data, bool already_active)
 {
+	// Read the new data from the gimbal_manager_set_attitude topic
 	gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
 	orb_copy(ORB_ID(gimbal_manager_set_attitude), _gimbal_manager_set_attitude_sub, &gimbal_manager_set_attitude);
 	control_data.type = ControlData::Type::Angle;
 
-	// If we were already active previously, we just update normally. Otherwise, there needs to be
-	// a major stick movement to re-activate manual (or it's running for the very first time).
 
+	// If we were already active, update the setpoint
 	if (already_active) {
 
-		//for (int i = 0; i < 4; i++) {
-		//	control_data.type_data.angle.q[i] = gimbal_manager_set_attitude.q[i];
-		//}
+		// Update the setpoint
 		(matrix::Quatf(gimbal_manager_set_attitude.q)).copyTo(control_data.type_data.angle.q);
 
 		control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
@@ -122,13 +124,13 @@ InputCAN::UpdateResult InputCAN::_read_control_data_from_subscription(ControlDat
 		control_data.type_data.angle.angular_velocity[1] = NAN;
 		control_data.type_data.angle.angular_velocity[2] = NAN;
 
+		// Debug: Print a status message
 		PX4_INFO("Received new gimbal attitude from InputCAN!");
 
 		return UpdateResult::UpdatedActive;
-
-	} else {
-		return UpdateResult::NoUpdate;
 	}
+
+	return UpdateResult::NoUpdate;
 }
 
 void InputCAN::print_status() const
