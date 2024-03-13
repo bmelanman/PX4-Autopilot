@@ -65,15 +65,15 @@ using namespace open_gimbal;
 static px4::atomic<bool> thread_should_exit {false};
 static px4::atomic<bool> thread_running {false};
 
-static constexpr int input_objs_len_max = 3;
+static constexpr int input_objs_len_max = 2;
 
 struct ThreadData {
-	InputBase *input_objs[input_objs_len_max] = {nullptr, nullptr, nullptr};
+	InputBase *input_objs[input_objs_len_max] = { nullptr, nullptr };
 	int input_objs_len = 0;
 	int last_input_active = -1;
-	OutputBase *output_obj = nullptr;
 	InputTest *test_input = nullptr;
-	ControlData control_data = {0};
+	OutputBase *output_obj = nullptr;
+	ControlData control_data = { 0 };
 };
 
 static ThreadData *g_thread_data = nullptr;
@@ -96,34 +96,45 @@ static bool _get_vehicle_attitude(vehicle_attitude_s &_vehicle_attitude)
 
 static int open_gimbal_thread_main(int argc, char *argv[])
 {
+	int i = 0;
+
 	ParameterHandles param_handles;
 	Parameters params {};
 	ThreadData thread_data;
 
+	// Debug: For printing quaternions
+	g_thread_data = &thread_data;
+
+	// Initialize parameters
 	if (!initialize_params(param_handles, params)) {
 		PX4_ERR("could not get mount parameters!");
 
-		if (thread_data.test_input) {
-			delete (thread_data.test_input);
-			thread_data.test_input = nullptr;
+		// Clean up if we fail to initialize
+		for (i = 0; i < thread_data.input_objs_len; ++i) {
+			if (thread_data.input_objs[i]) {
+				delete (thread_data.input_objs[i]);
+				thread_data.input_objs[i] = nullptr;
+			}
 		}
 
 		return PX4_ERROR;
 	}
 
+	// Set the thread status
 	thread_running.store(true);
 
+	// Subscribe to parameter updates
 	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
-	g_thread_data = &thread_data;
 
 	// Initialize test input object to set the initial orientation
 	thread_data.test_input = new InputTest(params);
 
-	// Initialize input object(s)
+	// Create input objects
 	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
 	thread_data.input_objs[thread_data.input_objs_len++] = new InputCAN(params);
 
-	for (int i = 0; i < thread_data.input_objs_len; ++i) {
+	// Verify the input objects were created
+	for (i = 0; i < thread_data.input_objs_len; ++i) {
 		if (!thread_data.input_objs[i]) {
 			PX4_ERR("input objs memory allocation failed");
 			thread_should_exit.store(true);
@@ -132,8 +143,9 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		}
 	}
 
+	// Initialize input objects
 	if (!thread_should_exit.load()) {
-		for (int i = 0; i < thread_data.input_objs_len; ++i) {
+		for (i = 0; i < thread_data.input_objs_len; ++i) {
 			if (thread_data.input_objs[i]->initialize() != 0) {
 				PX4_ERR("Input %d failed", i);
 				thread_should_exit.store(true);
@@ -143,18 +155,17 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		}
 	}
 
-	// Initialize output object(s)
+	// Create the output object
 	thread_data.output_obj = new OutputRC(params);
 
+	// Verify the output object was created
 	if (!thread_data.output_obj) {
 		PX4_ERR("output memory allocation failed");
 		thread_should_exit.store(true);
 	};
 
 	// Wait up to 10 seconds for the vehicle attitude to initialize
-	int counter = 0;
-
-	while (!thread_should_exit.load() && counter < 100) {
+	while (!thread_should_exit.load() && i++ < 100) {
 
 		// Check vehicle attitude
 		if (_get_vehicle_attitude(vehicle_attitude)) {
@@ -162,11 +173,9 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		}
 
 		px4_usleep(100000);
-		++counter;
 	}
 
 	static bool new_setpoints = false;
-
 	static InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
 
 	PX4_INFO("Initialization complete!");
@@ -181,20 +190,14 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			update_params(param_handles, params);
 		}
 
-		//if (thread_data.last_input_active == -1) {
-		//	// Reset control as no one is active anymore, or yet.
-		//	thread_data.control_data.device_compid = 0;
-		//}
-
 		new_setpoints = false;
 		update_result = InputBase::UpdateResult::NoUpdate;
 
+		// Update input and output objects
 		if (thread_data.input_objs_len > 0) {
 
-			// get input: we cannot make the timeout too large, because the output needs to update
-			// periodically for stabilization and angle updates.
-
-			for (int i = 0; i < thread_data.input_objs_len; ++i) {
+			// Check each input object for new setpoints
+			for (i = 0; i < thread_data.input_objs_len; ++i) {
 
 				const bool already_active = (thread_data.last_input_active == i);
 				// poll only on active input to reduce latency, or on all if none is active
@@ -217,9 +220,6 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 			}
 
-			// Always stabilize
-			//thread_data.output_obj->set_stabilize(true, true, true);
-
 			// Update output
 			if (thread_data.output_obj->update(thread_data.control_data, new_setpoints) == PX4_ERROR) {
 				PX4_ERR("Output update failed, exiting gimbal thread...");
@@ -236,9 +236,8 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 	PX4_INFO("Deinitializing...");
 
-	g_thread_data = nullptr;
-
-	for (int i = 0; i < input_objs_len_max; ++i) {
+	// Clean up input objects
+	for (i = 0; i < input_objs_len_max; ++i) {
 		if (thread_data.input_objs[i]) {
 			delete (thread_data.input_objs[i]);
 			thread_data.input_objs[i] = nullptr;
@@ -247,11 +246,13 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 	thread_data.input_objs_len = 0;
 
+	// Clean up the output object
 	if (thread_data.output_obj) {
 		delete (thread_data.output_obj);
 		thread_data.output_obj = nullptr;
 	}
 
+	// Set the thread status
 	thread_running.store(false);
 
 	PX4_INFO("Deinitialization complete, exiting...");
@@ -331,6 +332,8 @@ int stop(void)
 
 int status(void)
 {
+	int i = 0;
+
 	if (thread_running.load() && g_thread_data && g_thread_data->test_input) {
 
 		if (g_thread_data->input_objs_len == 0) {
@@ -339,7 +342,7 @@ int status(void)
 		} else {
 			PX4_INFO("Input Selected");
 
-			for (int i = 0; i < g_thread_data->input_objs_len; ++i) {
+			for (i = 0; i < g_thread_data->input_objs_len; ++i) {
 				if (i == g_thread_data->last_input_active) {
 					g_thread_data->input_objs[i]->print_status();
 				}
@@ -347,7 +350,7 @@ int status(void)
 
 			PX4_INFO("Input not selected");
 
-			for (int i = 0; i < g_thread_data->input_objs_len; ++i) {
+			for (i = 0; i < g_thread_data->input_objs_len; ++i) {
 				if (i != g_thread_data->last_input_active) {
 					g_thread_data->input_objs[i]->print_status();
 				}
@@ -422,45 +425,16 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
-// quaternion order: q0 -> w, q1 -> x, q2 -> y, q3 -> z
-#define _get_quat_roll(q) ( atan2f( 2.0f * (q(0) * q(1) + q(2) * q(3)), 1.0f - 2.0f * (q(1) * q(1) + q(2) * q(2)) ) )
-#define _get_quat_pitch(q) ( asinf( 2.0f * (q(0) * q(2) - q(3) * q(1)) ) )
-#define _get_quat_yaw(q) ( atan2f( 2.0f * (q(0) * q(3) + q(1) * q(2)), 1.0f - 2.0f * (q(2) * q(2) + q(3) * q(3)) ) )
-
 void _print_quat(const matrix::Quatf &q)
 {
 	// Convert the quaternion to Euler angles
 	matrix::Eulerf euler_angles(q);
-
-	// Convert the quaternion to Axis-Angles
-	matrix::AxisAnglef axis_angles(q);
-
-	PX4_INFO_RAW("Quaternion Form\n");
-	PX4_INFO_RAW("  q0: %8.4f \n", (double)q(0));
-	PX4_INFO_RAW("  q1: %8.4f \n", (double)q(1));
-	PX4_INFO_RAW("  q2: %8.4f \n", (double)q(2));
-	PX4_INFO_RAW("  q3: %8.4f \n", (double)q(3));
-	PX4_INFO_RAW("\n");
 
 	PX4_INFO_RAW("Euler Angle Form (deg)\n");
 	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(euler_angles(0) * M_RAD_TO_DEG_F));
 	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(euler_angles(1) * M_RAD_TO_DEG_F));
 	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(euler_angles(2) * M_RAD_TO_DEG_F));
 	PX4_INFO_RAW("\n");
-
-	PX4_INFO_RAW("Axis-Angle Form (deg)\n");
-	PX4_INFO_RAW("  x: %8.4f \n", (double)(axis_angles(0) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  y: %8.4f \n", (double)(axis_angles(1) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  z: %8.4f \n", (double)(axis_angles(2) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  r: %8.4f \n", (double)(axis_angles.angle() * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("\n");
-
-	PX4_INFO_RAW("Converted Form? (deg)\n");
-	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(_get_quat_roll(q) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(_get_quat_pitch(q) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(_get_quat_yaw(q) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("\n");
-
 }
 
 //! This will be deleted later
@@ -569,6 +543,18 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 
 	param_get(param_handles.mnt_lnd_p_min, &params.mnt_lnd_p_min);
 	param_get(param_handles.mnt_lnd_p_max, &params.mnt_lnd_p_max);
+
+	param_get(param_handles.mnt_roll_p, &params.mnt_roll_p);
+	param_get(param_handles.mnt_roll_i, &params.mnt_roll_i);
+	param_get(param_handles.mnt_roll_d, &params.mnt_roll_d);
+
+	param_get(param_handles.mnt_pitch_p, &params.mnt_pitch_p);
+	param_get(param_handles.mnt_pitch_i, &params.mnt_pitch_i);
+	param_get(param_handles.mnt_pitch_d, &params.mnt_pitch_d);
+
+	param_get(param_handles.mnt_yaw_p, &params.mnt_yaw_p);
+	param_get(param_handles.mnt_yaw_i, &params.mnt_yaw_i);
+	param_get(param_handles.mnt_yaw_d, &params.mnt_yaw_d);
 }
 
 #define INIT_PARAM(handle, name, err_flag) do { \
@@ -610,6 +596,18 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_lnd_p_min, 	"MNT_LND_P_MIN", 	err_flag);
 	INIT_PARAM(param_handles.mnt_lnd_p_max, 	"MNT_LND_P_MAX", 	err_flag);
 
+	INIT_PARAM(param_handles.mnt_roll_p, 		"MNT_ROLL_P", 	    	err_flag);
+	INIT_PARAM(param_handles.mnt_roll_i, 		"MNT_ROLL_I", 	    	err_flag);
+	INIT_PARAM(param_handles.mnt_roll_d, 		"MNT_ROLL_D", 	    	err_flag);
+
+	INIT_PARAM(param_handles.mnt_pitch_p, 		"MNT_PITCH_P", 	    	err_flag);
+	INIT_PARAM(param_handles.mnt_pitch_i, 		"MNT_PITCH_I", 	    	err_flag);
+	INIT_PARAM(param_handles.mnt_pitch_d, 		"MNT_PITCH_D", 	    	err_flag);
+
+	INIT_PARAM(param_handles.mnt_yaw_p, 		"MNT_YAW_P", 	    	err_flag);
+	INIT_PARAM(param_handles.mnt_yaw_i, 		"MNT_YAW_I", 	    	err_flag);
+	INIT_PARAM(param_handles.mnt_yaw_d, 		"MNT_YAW_D", 	    	err_flag);
+
 	if (!err_flag) {
 		update_params(param_handles, params);
 	}
@@ -634,12 +632,8 @@ $ open_gimbal test pitch -45 yaw 30
 
 	PRINT_MODULE_USAGE_NAME("open_gimbal", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	//PRINT_MODULE_USAGE_COMMAND("status");
-	//PRINT_MODULE_USAGE_COMMAND_DESCR("primary-control", "Set who is in control of gimbal");
-	//PRINT_MODULE_USAGE_ARG("<sysid> <compid>", "MAVLink system ID and MAVLink component ID", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
 	PRINT_MODULE_USAGE_ARG("<roll|pitch|yaw <angle>>", "Specify an axis and an angle in degrees", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("get_orientation", "Print the current gyro output");
-	//PRINT_MODULE_USAGE_COMMAND_DESCR("stop", "Stop the driver");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 }
