@@ -89,48 +89,33 @@ param set PWM_AUX_TIM0 400
 pwm_out start
 
 #------------------------------------------------------------------------------
-# MavLink Module
-#------------------------------------------------------------------------------
-
-# Set the MavLink system ID
-param set MAV_SYS_ID 2
-
-# Set the MavLink component ID
-param set MAV_COMP_ID
-
-# Start the MavLink module
-mavlink start -d /dev/ttyS1 -b 57600 -m gimbal
-
-#------------------------------------------------------------------------------
 # Open-Gimbal Module
 #------------------------------------------------------------------------------
-
-# Enable stabilisation
-param set MNT_DO_STAB 1
 
 # Set gimbal output channels
 param set MNT_MAN_ROLL      1
 param set MNT_MAN_PITCH     2
 param set MNT_MAN_YAW       3
 
-# Set input and output to RC
-param set MNT_MODE_IN       0
-param set MNT_MODE_OUT      0
-
 # A limit of [-180, 180] is set by default
-param set MNT_RANGE_ROLL    0
-param set MNT_RANGE_PITCH   0
-param set MNT_RANGE_YAW     0
+#param set MNT_RANGE_PITCH   0
+#param set MNT_RANGE_ROLL    0
+#param set MNT_RANGE_YAW     0
 
-param set MNT_OFF_ROLL      0
-param set MNT_OFF_PITCH     0
-param set MNT_OFF_YAW       0
+# Roll PID Gains
+param set MNT_ROLL_P 1.0
+param set MNT_ROLL_I 0.5
+param set MNT_ROLL_D 0.5
 
-# param set SENS_BOARD_ROT 10
-# param set MNT_OFF_ROLL 22.5
+# Pitch PID Gains
+param set MNT_PITCH_P 1.0
+param set MNT_PITCH_I 0.5
+param set MNT_PITCH_D 0.5
 
-# param set SENS_BOARD_ROT 6
-# param set MNT_OFF_ROLL 202.5
+# Yaw PID Gains
+#param set MNT_YAW_P 1.0
+#param set MNT_YAW_I 0.5
+#param set MNT_YAW_D 0.5
 
 # Start Open-Gimbal
 open_gimbal start
