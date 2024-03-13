@@ -42,4 +42,5 @@ px4_add_module(
 		open_gimbal.cpp
 	DEPENDS
 		geo
+		RateControl
 	)
