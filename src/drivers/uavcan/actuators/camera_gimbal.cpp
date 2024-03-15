@@ -39,6 +39,7 @@
 
 #include "camera_gimbal.hpp"
 #include <systemlib/err.h>
+#include <uavcan/equipment/camera_gimbal/Mode.hpp>
 
 UavcanCameraGimbalController::UavcanCameraGimbalController(uavcan::INode &node) :
 	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::uavcan),
@@ -67,19 +68,27 @@ UavcanCameraGimbalController::init()
 void
 UavcanCameraGimbalController::Run()
 {
-	mount_orientation_s mount_orientation;
+	static mount_orientation_s mount_orientation = { 0 };
+	static matrix::Quatf quat(0.0f, 0.0f, 0.0f, 0.0f);
 
 	if (_mount_orientation_sub.update(&mount_orientation)) {
-		float quaternion[4];
-		float *euler = mount_orientation.attitude_euler_angle;
 
-		matrix::Quatf(matrix::Eulerf(euler[0], euler[1], euler[2])).copyTo(quaternion);
+		// Convert from euler angles to quaternions
+		quat = matrix::Quatf(matrix::Eulerf(
+					     mount_orientation.attitude_euler_angle[0],
+					     mount_orientation.attitude_euler_angle[1],
+					     mount_orientation.attitude_euler_angle[2]
+				     ));
 
+		// Publish the quaternion to the gimbal
 		_cmd.gimbal_id = 0;
+		_cmd.quaternion_xyzw[0] = quat(0);
+		_cmd.quaternion_xyzw[1] = quat(1);
+		_cmd.quaternion_xyzw[2] = quat(2);
+		_cmd.quaternion_xyzw[3] = quat(3);
 
-		for (int i = 0; i < 4; i++)
-			_cmd.quaternion_xyzw[i] = quaternion[i];
-
-		_uavcan_pub_raw_cmd.broadcast(_cmd);
+		if (_uavcan_pub_raw_cmd.broadcast(_cmd) < 0) {
+			PX4_ERR("UavcanCameraGimbalController: Error publishing uavcan::equipment::camera_gimbal::AngularCommand");
+		}
 	}
 }

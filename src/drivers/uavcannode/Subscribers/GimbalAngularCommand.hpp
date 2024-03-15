@@ -66,6 +66,8 @@ public:
 			return false;
 		}
 
+		PX4_INFO("uavcan::equipment::camera_gimbal::AngularCommand subscription succeeded");
+
 		return true;
 	}
 
@@ -78,15 +80,21 @@ public:
 	}
 
 private:
+	uORB::Publication<gimbal_manager_set_attitude_s> _gimbal_manager_set_attitude_pub{ORB_ID(gimbal_manager_set_attitude)};
+	gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
+
 	void callback(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand> &msg)
 	{
-		PX4_INFO("Received gimbal_manager_set_attitude message");
-		gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
-		for (int i=0;i<4;i++)
-			gimbal_manager_set_attitude.q[i] = msg.quaternion_xyzw[i];
-		_gimbal_manager_set_attitude_pub.publish(gimbal_manager_set_attitude);
-	}
+		gimbal_manager_set_attitude.q[0] = msg.quaternion_xyzw[0];
+		gimbal_manager_set_attitude.q[1] = msg.quaternion_xyzw[1];
+		gimbal_manager_set_attitude.q[2] = msg.quaternion_xyzw[2];
+		gimbal_manager_set_attitude.q[3] = msg.quaternion_xyzw[3];
 
-	uORB::Publication<gimbal_manager_set_attitude_s> _gimbal_manager_set_attitude_pub{ORB_ID(gimbal_manager_set_attitude)};
+		if (!_gimbal_manager_set_attitude_pub.publish(gimbal_manager_set_attitude)) {
+			PX4_ERR("gimbal_manager_set_attitude publication failed");
+
+		}
+	}
 };
+
 } // namespace uavcannode

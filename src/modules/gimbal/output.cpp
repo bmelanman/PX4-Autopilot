@@ -54,14 +54,18 @@ OutputBase::OutputBase(const Parameters &parameters)
 
 void OutputBase::publish()
 {
-	mount_orientation_s mount_orientation{};
-
-	for (unsigned i = 0; i < 3; ++i) {
-		mount_orientation.attitude_euler_angle[i] = _angle_outputs[i];
-	}
+	static mount_orientation_s mount_orientation{};
 
 	mount_orientation.timestamp = hrt_absolute_time();
-	_mount_orientation_pub.publish(mount_orientation);
+	mount_orientation.attitude_euler_angle[0] = _angle_outputs[0];
+	mount_orientation.attitude_euler_angle[1] = _angle_outputs[1];
+	mount_orientation.attitude_euler_angle[2] = _angle_outputs[2];
+	mount_orientation.attitude_euler_angle[3] = _angle_outputs[3];
+
+	if (!_mount_orientation_pub.publish(mount_orientation)) {
+		PX4_ERR("Mount orientation publication failed");
+
+	}
 }
 
 float OutputBase::_calculate_pitch(double lon, double lat, float altitude,
