@@ -1,6 +1,6 @@
 indent=force-tab=8
 style=linux
-indent-preprocessor
+indent-preproc-define
 indent-cases
 break-blocks=all
 pad-oper
@@ -14,5 +14,5 @@ align-reference=name
 ignore-exclude-errors-x
 lineend=linux
 exclude=EASTL
-add-brackets
+add-braces
 max-code-length=120
