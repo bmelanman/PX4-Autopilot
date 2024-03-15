@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 # This script is used to flash the cannode firmware to the cannode board
 BOARD_NAME=ark_cannode_default
@@ -20,9 +20,7 @@ JLinkGDBServer \
 # Start a GDB session
 arm-none-eabi-gdb "${ELF_FILE}" \
 	-ex "target remote localhost:2331" \
-	-ex "monitor reset" \
 	-ex "load" \
-	-ex "monitor reset" \
 	-ex "detach" \
 	-ex "quit"
 
