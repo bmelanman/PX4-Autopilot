@@ -36,6 +36,9 @@
 
 #include "input.h"
 
+#include <uORB/Subscription.hpp>
+#include <uORB/topics/gimbal_manager_set_attitude.h>
+
 namespace open_gimbal
 {
 
@@ -54,11 +57,9 @@ public:
 	virtual int initialize();
 
 private:
-	virtual UpdateResult _read_control_data_from_subscription(ControlData &control_data, bool already_active);
+	uORB::Subscription _gimbal_manager_set_attitude_sub{ORB_ID(gimbal_manager_set_attitude)};
 
-	int _gimbal_manager_set_attitude_sub{-1};
-
-	float _last_set_aux_values[3] {};
+	gimbal_manager_set_attitude_s _gimbal_manager_set_attitude{};
 };
 
 } /* namespace open_gimbal */
