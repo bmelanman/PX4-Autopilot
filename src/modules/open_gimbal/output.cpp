@@ -49,6 +49,13 @@ OutputBase::OutputBase(const Parameters &parameters)
 	_last_update = hrt_absolute_time();
 }
 
+OutputBase::~OutputBase()
+{
+	_vehicle_attitude_sub.unsubscribe();
+	_vehicle_global_position_sub.unsubscribe();
+	_vehicle_land_detected_sub.unsubscribe();
+}
+
 matrix::Quatf OutputBase::_get_q_setpoint()
 {
 	// Debug: For printing the quaternion setpoint
@@ -57,15 +64,15 @@ matrix::Quatf OutputBase::_get_q_setpoint()
 
 void OutputBase::publish()
 {
-	mount_orientation_s mount_orientation{};
+	//mount_orientation_s mount_orientation{};
 
-	mount_orientation.attitude_euler_angle[OutputBase::_INDEX_ROLL] = _angle_outputs[OutputBase::_INDEX_ROLL];
-	mount_orientation.attitude_euler_angle[OutputBase::_INDEX_PITCH] = _angle_outputs[OutputBase::_INDEX_PITCH];
-	mount_orientation.attitude_euler_angle[OutputBase::_INDEX_YAW] = _angle_outputs[OutputBase::_INDEX_YAW];
+	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_ROLL] = _angle_outputs_deg[OutputBase::_INDEX_ROLL];
+	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_PITCH] = _angle_outputs_deg[OutputBase::_INDEX_PITCH];
+	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_YAW] = _angle_outputs_deg[OutputBase::_INDEX_YAW];
 
-	mount_orientation.timestamp = hrt_absolute_time();
+	//mount_orientation.timestamp = hrt_absolute_time();
 
-	_mount_orientation_pub.publish(mount_orientation);
+	//_mount_orientation_pub.publish(mount_orientation);
 }
 
 void OutputBase::_set_angle_setpoints(const ControlData &control_data)
@@ -98,89 +105,6 @@ void OutputBase::_set_angle_setpoints(const ControlData &control_data)
 	_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
 }
 
-//inline matrix::Quatf quat_conjugate(const matrix::Quatf q)
-//{
-//	// Conjugate of a quaternion is: q' = ( q0, −q1, −q2, −q3 )
-//	return matrix::Quatf(q(0), -q(1), -q(2), -q(3));
-//}
-
-//inline float quat_normalize(const matrix::Quatf q)
-//{
-//	// Normalize the quaternion
-//	return sqrtf(q(0) * q(0) + q(1) * q(1) + q(2) * q(2) + q(3) * q(3));
-//}
-
-//pitch calc
-//float norq = sqrt( q[0]*q[0] + q[3]*q[3] );
-
-//angleq[0] = q[0]/norq;
-//angleq[1] = 0 ; //x
-//angleq[2] = 0;  //y
-//angleq[3] = q[3]/norq;  //z
-//newqangle = quatProd(quatConjugate(q),angleq);
-
-//norq = sqrt( newqangle[0]*newqangle[0]  +  newqangle[1]*newqangle[1]  );
-
-//angleq[0] =  newqangle[0]/norq;
-//angleq[1] = newqangle[1]/norq;  //z ; //x
-//angleq[2] = 0;  //y
-//angleq[3] = 0;
-
-//newqpitch = quatProd(quatConjugate(newqangle),angleq);
-
-//float _calculate_pitch_from_quaternion(const matrix::Quatf q, float angle, int axis)
-//{
-//	// Normalize the quaternion
-//	float norq = quat_normalize(q);
-//
-//	// Calculate the angle quaternion
-//	matrix::Quatf angleq;
-//
-//	switch (axis) {
-//	case OutputBase::_INDEX_ROLL:
-//		angleq = matrix::Quatf(q(0) / norq, 0.0f, 0.0f, q(3) / norq);
-//		break;
-//
-//	case OutputBase::_INDEX_PITCH:
-//		angleq = matrix::Quatf(q(0) / norq, 0.0f, 0.0f, q(3) / norq);
-//		break;
-//
-//	case OutputBase::_INDEX_YAW:
-//		angleq = matrix::Quatf(q(0) / norq, 0.0f, 0.0f, q(3) / norq);
-//		break;
-//	}
-//
-//	// Calculate the new quaternion
-//	matrix::Quatf newqangle = quat_conjugate(q) * angleq;
-//
-//	// Normalize the new quaternion
-//	norq = quat_normalize(newqangle);
-//
-//	switch (axis) {
-//	case OutputBase::_INDEX_ROLL:
-//		angleq = matrix::Quatf(newqangle(0) / norq, newqangle(1) / norq, 0.0f, 0.0f);
-//		break;
-//
-//	case OutputBase::_INDEX_PITCH:
-//		angleq = matrix::Quatf(newqangle(0) / norq, 0.0f, newqangle(1) / norq, 0.0f);
-//		break;
-//
-//	case OutputBase::_INDEX_YAW:
-//		angleq = matrix::Quatf(newqangle(0) / norq, 0.0f, 0.0f, newqangle(1) / norq);
-//		break;
-//	}
-//
-//	return 0.0f;
-//}
-
-#define K_P 1.5f
-#define K_I 0.3f
-#define K_D 0.0f
-
-#define P_VECT (matrix::Vector3f(K_P, K_P, K_P))
-#define I_VECT (matrix::Vector3f(K_I, K_I, K_I))
-#define D_VECT (matrix::Vector3f(K_D, K_D, K_D))
-
 #define ANG_ACC_NUL (matrix::Vector3f(0.0f, 0.0f, 0.0f))
 
 int OutputBase::_calculate_angle_output(const hrt_abstime &t)
@@ -204,7 +128,7 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 		PX4_ERR("Failed to get vehicle attitude! :(");
 
 		for (i = 0; i < 3; ++i) {
-			_angle_outputs[i] = 0.0f;
+			_angle_outputs_deg[i] = 0.0f;
 			_gimbal_outputs[i] = 0.0f;
 		}
 
@@ -216,7 +140,7 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 		PX4_ERR("Invalid setpoint quaternions! :(");
 
 		for (i = 0; i < 3; ++i) {
-			_angle_outputs[i] = 0.0f;
+			_angle_outputs_deg[i] = 0.0f;
 			_gimbal_outputs[i] = 0.0f;
 		}
 
@@ -248,8 +172,8 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	bool _is_landed = false;
 
 	// Pass the euler angles to the rate controller
-	matrix::Vector3f gimbal_rate = rate_controller->update(att_current, att_setpoint, ANG_ACC_NUL, (t_now - t_prev),
-				       _is_landed);
+	matrix::Vector3f gimbal_rate = rate_controller->update(
+					       att_current, att_setpoint, ANG_ACC_NUL, (t_now - t_prev), _is_landed);
 
 	// Update the previous timestamp
 	t_prev = t_now;
@@ -261,36 +185,40 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	//	math::radians(_parameters.mnt_range_yaw)
 	//};
 
-	static float curr_angle = 0.0;
-
 	// TODO: This will need some amount of modification to allow for unlimited yaw rotation
 	for (i = 0; i < 3; ++i) {
 
-		// Get the axis setpoint and wrap it to the range [-pi, pi]
-		curr_angle = matrix::wrap_pi(gimbal_rate(i));
+		// Get the axis setpoint, wrap it to the range [-pi, pi], and normalize it to the range [-1, 1]
+		_gimbal_outputs[i] = matrix::wrap_pi(gimbal_rate(i)) / M_PI_F;
 
 		//// Apply the angle limit if it is within the range (0, pi)
 		//if (ranges_rad[i] > 0 && ranges_rad[i] < M_PI_F) {
-
 		//	if (curr_angle > ranges_rad[i]) {
 		//		curr_angle = ranges_rad[i];
-
 		//	} else if (curr_angle < -ranges_rad[i]) {
 		//		curr_angle = -ranges_rad[i];
 		//	}
 		//}
 
 		// Debug: Add the angle in degrees to the outputs array
-		_angle_outputs[i] = curr_angle * M_RAD_TO_DEG_F;
-		// Gimbal output is normalized to the range [-1, 1]
-		_gimbal_outputs[i] = curr_angle / M_PI_F;
+		_angle_outputs_deg[i] = _gimbal_outputs[i] * 180.0f;
+	}
+
+	static int cnt = 0;
+
+	// Debug: Print the gimbal rate
+	if (cnt++ % 128 == 0) {
+		PX4_INFO("Gimbal Rate [-1, 1]:");
+		PX4_INFO_RAW("  	Roll:  % 4.3f\n", (double)(_gimbal_outputs[0]));
+		PX4_INFO_RAW("  	Pitch: % 4.3f\n", (double)(_gimbal_outputs[1]));
+		PX4_INFO_RAW("  	Yaw:   % 4.3f\n", (double)(_gimbal_outputs[2]));
 	}
 
 	// constrain pitch to [MNT_LND_P_MIN, MNT_LND_P_MAX] if landed
 	//if (_landed) {
-	//	if (PX4_ISFINITE(_angle_outputs[1])) {
-	//		_angle_outputs[1] = _translate_angle2gimbal(
-	//					    _angle_outputs[1],
+	//	if (PX4_ISFINITE(_angle_outputs_deg[1])) {
+	//		_angle_outputs_deg[1] = _translate_angle2gimbal(
+	//					    _angle_outputs_deg[1],
 	//					    _parameters.mnt_off_pitch,
 	//					    _parameters.mnt_range_pitch);
 	//	}

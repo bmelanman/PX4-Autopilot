@@ -72,7 +72,7 @@ public:
 	static constexpr uint8_t _INDEX_PITCH = gimbal_controls_s::INDEX_PITCH;
 	static constexpr uint8_t _INDEX_YAW = gimbal_controls_s::INDEX_YAW;
 
-	float _angle_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [rad]
+	float _angle_outputs_deg[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [deg]
 protected:
 	MapProjection _projection_reference{}; ///< class to convert (lon, lat) to local [m]
 
@@ -92,7 +92,7 @@ protected:
 	// Yaw follows the vehicle (not lock/absolute mode).
 	bool _absolute_angle[3] = {true, true, false };
 
-	/** calculate the _angle_outputs (with speed) and stabilize if needed */
+	/** calculate the _angle_outputs_deg (with speed) and stabilize if needed */
 	int _calculate_angle_output(const hrt_abstime &t);
 
 	float _gimbal_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [-1, 1]
