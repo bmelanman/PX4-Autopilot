@@ -43,8 +43,8 @@ namespace open_gimbal
 struct Parameters {
 	int32_t mnt_mode_in;
 	int32_t mnt_mode_out;
-	int32_t mnt_mav_sysid_v1;
-	int32_t mnt_mav_compid_v1;
+	int32_t mnt_mav_sysid;
+	int32_t mnt_mav_compid;
 	int32_t mnt_man_pitch;
 	int32_t mnt_man_roll;
 	int32_t mnt_man_yaw;
@@ -79,8 +79,8 @@ struct Parameters {
 struct ParameterHandles {
 	param_t mnt_mode_in;
 	param_t mnt_mode_out;
-	param_t mnt_mav_sysid_v1;
-	param_t mnt_mav_compid_v1;
+	param_t mnt_mav_sysid;
+	param_t mnt_mav_compid;
 	param_t mnt_man_pitch;
 	param_t mnt_man_roll;
 	param_t mnt_man_yaw;
