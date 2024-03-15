@@ -92,23 +92,17 @@ void OutputRC::print_status() const
 {
 	PX4_INFO("Output: AUX");
 
-	double angles[3] = {
-		OutputBase::_angle_outputs[OutputBase::_INDEX_ROLL],
-		OutputBase::_angle_outputs[OutputBase::_INDEX_PITCH],
-		OutputBase::_angle_outputs[OutputBase::_INDEX_YAW]
-	};
-
 	// Print the target angles
 	PX4_INFO("Target Angles (deg):");
-	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)(math::degrees(angles[0])));
-	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)(math::degrees(angles[1])));
-	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)(math::degrees(angles[2])));
+	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)(OutputBase::_angle_outputs_deg[OutputBase::_INDEX_ROLL]));
+	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)(OutputBase::_angle_outputs_deg[OutputBase::_INDEX_PITCH]));
+	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)(OutputBase::_angle_outputs_deg[OutputBase::_INDEX_YAW]));
 
 	// Print the angles after conversion
 	PX4_INFO("Converted Angles (-1,1):");
-	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_ROLL] * 180);
-	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_PITCH] * 180);
-	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_YAW] * 180);
+	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_ROLL]);
+	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_PITCH]);
+	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_YAW]);
 	PX4_INFO_RAW("%c", '\0');
 }
 
