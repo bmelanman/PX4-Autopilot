@@ -31,9 +31,9 @@
  *
  ****************************************************************************/
 
+#include <cstdint>
 #include <stdlib.h>
 #include <string.h>
-#include <cstdint>
 
 #include <px4_platform_common/defines.h>
 #include <px4_platform_common/tasks.h>
@@ -52,9 +52,11 @@
 // Outputs
 #include "output_rc.h"
 
-// uORB Subscriptions
+// uORB Subscriptions and Publications
 #include <uORB/SubscriptionInterval.hpp>
 #include <uORB/topics/parameter_update.h>
+#include <uORB/topics/vehicle_command.h>
+#include <uORB/topics/gimbal_device_information.h>
 
 // Polling refresh rate in microseconds
 #define REFRESH_RATE_US ( 100U )
@@ -74,13 +76,28 @@ struct ThreadData {
 	InputTest *test_input = nullptr;
 	OutputBase *output_obj = nullptr;
 	ControlData control_data = { 0 };
+	Parameters thread_params {};
 };
 
 static ThreadData *g_thread_data = nullptr;
 
 // Subscribe to VehicleAttitude
 uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
-vehicle_attitude_s vehicle_attitude{};
+vehicle_attitude_s g_vehicle_attitude{};
+
+// Subscribe to VehicleCommand
+uORB::Subscription _vehicle_command_sub{ORB_ID(vehicle_command)};
+vehicle_command_s vehicle_command{};
+
+// Publish to GimbalDeviceInformation
+uORB::Publication<gimbal_device_information_s> _gimbal_device_information_pub{ORB_ID(gimbal_device_information)};
+gimbal_device_information_s gimbal_device_information{};
+
+// Gimbal Metadata
+#define GIMBAL_INFO_MAX_NAME_LEN ( 32U )
+static constexpr char _gimbal_vendor_name[GIMBAL_INFO_MAX_NAME_LEN] = "ARK Electronics";
+static constexpr char _gimbal_model_name[GIMBAL_INFO_MAX_NAME_LEN] = "Open-Gimbal";
+static constexpr char _gimbal_custom_name[GIMBAL_INFO_MAX_NAME_LEN] = "";
 
 static void usage();
 static void update_params(ParameterHandles &param_handles, Parameters &params);
@@ -89,9 +106,52 @@ static bool initialize_params(ParameterHandles &param_handles, Parameters &param
 static int open_gimbal_thread_main(int argc, char *argv[]);
 extern "C" __EXPORT int open_gimbal_main(int argc, char *argv[]);
 
-static bool _get_vehicle_attitude(vehicle_attitude_s &_vehicle_attitude)
+static bool _update_vehicle_attitude(bool must_update = false)
 {
-	return _vehicle_attitude_sub.copy(&_vehicle_attitude);
+	// Return true if the vehicle attitude was updated, or if we don't care about new data
+	return (!_vehicle_attitude_sub.update(&g_vehicle_attitude) ? !must_update : true);
+}
+
+static void _provide_gimbal_device_information()
+{
+
+	// Check if the command is a request for gimbal device information
+	if (vehicle_command.command == vehicle_command_s::VEHICLE_CMD_REQUEST_MESSAGE &&
+	    (uint16_t)(vehicle_command.param1) == vehicle_command_s::VEHICLE_CMD_GIMBAL_DEVICE_INFORMATION) {
+
+		// Setup the response
+		gimbal_device_information.timestamp = hrt_absolute_time();
+
+		// TODO: Fill in more fields, maybe via params?
+		memcpy(gimbal_device_information.vendor_name, _gimbal_vendor_name, GIMBAL_INFO_MAX_NAME_LEN);
+		memcpy(gimbal_device_information.model_name,  _gimbal_model_name,  GIMBAL_INFO_MAX_NAME_LEN);
+		memcpy(gimbal_device_information.custom_name, _gimbal_custom_name, GIMBAL_INFO_MAX_NAME_LEN);
+		gimbal_device_information.firmware_version = 0;
+		gimbal_device_information.hardware_version = 0;
+		gimbal_device_information.uid = 0;
+
+		// Gimbal has roll and pitch axes, as well as an infinite yaw axis
+		gimbal_device_information.cap_flags =
+			gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_HAS_ROLL_AXIS  |
+			gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_HAS_PITCH_AXIS |
+			gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_HAS_YAW_AXIS   |
+			gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_INFINITE_YAW;
+
+		// Ignore custom capabilities (for now?)
+		gimbal_device_information.custom_cap_flags = 0;
+
+		// Struct's angle limits are in radians, but params are in degrees!
+		gimbal_device_information.roll_min = -(g_thread_data->thread_params.mnt_range_roll) * M_DEG_TO_RAD_F;
+		gimbal_device_information.roll_max = (g_thread_data->thread_params.mnt_range_roll) * M_DEG_TO_RAD_F;
+
+		gimbal_device_information.pitch_min = -(g_thread_data->thread_params.mnt_range_pitch) * M_DEG_TO_RAD_F;
+		gimbal_device_information.pitch_max = (g_thread_data->thread_params.mnt_range_pitch) * M_DEG_TO_RAD_F;
+
+		gimbal_device_information.yaw_min = -(g_thread_data->thread_params.mnt_range_yaw) * M_DEG_TO_RAD_F;
+		gimbal_device_information.yaw_max = (g_thread_data->thread_params.mnt_range_yaw) * M_DEG_TO_RAD_F;
+
+		gimbal_device_information.gimbal_device_compid = g_thread_data->thread_params.mnt_mav_compid;
+	}
 }
 
 static int open_gimbal_thread_main(int argc, char *argv[])
@@ -99,14 +159,13 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	int i = 0;
 
 	ParameterHandles param_handles;
-	Parameters params {};
 	ThreadData thread_data;
 
 	// Debug: For printing quaternions
 	g_thread_data = &thread_data;
 
 	// Initialize parameters
-	if (!initialize_params(param_handles, params)) {
+	if (!initialize_params(param_handles, thread_data.thread_params)) {
 		PX4_ERR("could not get mount parameters!");
 
 		// Clean up if we fail to initialize
@@ -127,16 +186,16 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
 
 	// Initialize test input object to set the initial orientation
-	thread_data.test_input = new InputTest(params);
+	thread_data.test_input = new InputTest(thread_data.thread_params);
 
 	// Create input objects
 	thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
-	thread_data.input_objs[thread_data.input_objs_len++] = new InputCAN(params);
+	thread_data.input_objs[thread_data.input_objs_len++] = new InputCAN(thread_data.thread_params);
 
 	// Verify the input objects were created
 	for (i = 0; i < thread_data.input_objs_len; ++i) {
 		if (!thread_data.input_objs[i]) {
-			PX4_ERR("input objs memory allocation failed");
+			PX4_ERR("Input %d failed to initialize! Exiting... :(", i);
 			thread_should_exit.store(true);
 
 			break;
@@ -156,7 +215,7 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	}
 
 	// Create the output object
-	thread_data.output_obj = new OutputRC(params);
+	thread_data.output_obj = new OutputRC(thread_data.thread_params);
 
 	// Verify the output object was created
 	if (!thread_data.output_obj) {
@@ -168,7 +227,7 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	while (!thread_should_exit.load() && i++ < 100) {
 
 		// Check vehicle attitude
-		if (_get_vehicle_attitude(vehicle_attitude)) {
+		if (_update_vehicle_attitude(true)) {
 			break;
 		}
 
@@ -187,7 +246,12 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			parameter_update_s pupdate;
 			parameter_update_sub.copy(&pupdate);
 
-			update_params(param_handles, params);
+			update_params(param_handles, thread_data.thread_params);
+		}
+
+		// Check for a new vehicle command
+		if (_vehicle_command_sub.update(&vehicle_command)) {
+			_provide_gimbal_device_information();
 		}
 
 		new_setpoints = false;
@@ -441,14 +505,14 @@ void _print_quat(const matrix::Quatf &q)
 int get_orientation(int argc, char *argv[])
 {
 	// Get the current vehicle attitude
-	if (_get_vehicle_attitude(vehicle_attitude)) {
+	if (_update_vehicle_attitude()) {
 
 		// Convert to a matrix::Quaternion
 		matrix::Quatf q(
-			vehicle_attitude.q[0],
-			vehicle_attitude.q[1],
-			vehicle_attitude.q[2],
-			vehicle_attitude.q[3]
+			g_vehicle_attitude.q[0],
+			g_vehicle_attitude.q[1],
+			g_vehicle_attitude.q[2],
+			g_vehicle_attitude.q[3]
 		);
 
 		PX4_INFO_RAW("\n");
@@ -465,9 +529,9 @@ int get_orientation(int argc, char *argv[])
 		PX4_INFO_RAW("/* Output Angles ******************************/\n\n");
 
 		PX4_INFO_RAW("Motor Output:\n");
-		PX4_INFO_RAW("  Roll:  %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs[0]);
-		PX4_INFO_RAW("  Pitch: %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs[1]);
-		PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs[2]);
+		PX4_INFO_RAW("  Roll:  %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs_deg[0]);
+		PX4_INFO_RAW("  Pitch: %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs_deg[1]);
+		PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs_deg[2]);
 		PX4_INFO_RAW("\n");
 
 		PX4_INFO_RAW("/**********************************************/\n\n");
@@ -514,8 +578,8 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_mode_in, &params.mnt_mode_in);
 	param_get(param_handles.mnt_mode_out, &params.mnt_mode_out);
 
-	param_get(param_handles.mnt_mav_sysid_v1, &params.mnt_mav_sysid_v1);
-	param_get(param_handles.mnt_mav_compid_v1, &params.mnt_mav_compid_v1);
+	param_get(param_handles.mnt_mav_sysid, &params.mnt_mav_sysid);
+	param_get(param_handles.mnt_mav_compid, &params.mnt_mav_compid);
 
 	param_get(param_handles.mnt_man_pitch, &params.mnt_man_pitch);
 	param_get(param_handles.mnt_man_roll, &params.mnt_man_roll);
@@ -558,11 +622,11 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 }
 
 #define INIT_PARAM(handle, name, err_flag) do { \
-        if ((handle = param_find(name)) == PARAM_INVALID) { \
-            PX4_ERR("failed to find parameter " name); \
-            err_flag = true; \
-        } \
-    } while (0)
+		if ((handle = param_find(name)) == PARAM_INVALID) { \
+			PX4_ERR("failed to find parameter " name); \
+			err_flag = true; \
+		} \
+	} while (0)
 
 bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 {
@@ -571,8 +635,8 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_mode_in, 		"MNT_MODE_IN", 	    	err_flag);
 	INIT_PARAM(param_handles.mnt_mode_out, 		"MNT_MODE_OUT", 	err_flag);
 
-	INIT_PARAM(param_handles.mnt_mav_sysid_v1, 	"MNT_MAV_SYSID", 	err_flag);
-	INIT_PARAM(param_handles.mnt_mav_compid_v1, 	"MNT_MAV_COMPID", 	err_flag);
+	INIT_PARAM(param_handles.mnt_mav_sysid, 	"MNT_MAV_SYSID", 	err_flag);
+	INIT_PARAM(param_handles.mnt_mav_compid, 	"MNT_MAV_COMPID", 	err_flag);
 
 	INIT_PARAM(param_handles.mnt_man_pitch, 	"MNT_MAN_PITCH", 	err_flag);
 	INIT_PARAM(param_handles.mnt_man_roll, 		"MNT_MAN_ROLL", 	err_flag);
