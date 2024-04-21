@@ -17,6 +17,10 @@ param set-default SENS_IMU_CLPNOTI 0
 param set-default SENS_IMU_AUTOCAL 1
 param set-default SENS_IMU_MODE 1
 
+# Configure sensors
+param set-default CAL_ACC0_PRIO  75 	# High priority
+param set-default CAL_GYRO0_PRIO 75 	# High priority
+
 # Set axis limits
 param set-default FD_FAIL_P 180
 param set-default FD_FAIL_R 180
@@ -50,31 +54,80 @@ commander start
 # PWM Output Module
 #------------------------------------------------------------------------------
 
-# TODO: Why do we have to go back and forth between MAIN and AUX?
+# Initializes either the MAIN or AUX channels, with priority given to AUX
+if param show -q PWM_AUX_FUNC1
+then
+    # PWM AUX Ch. 1 -> Gimbal Roll
+    param set-default PWM_AUX_FUNC1 420
+    param set-default PWM_AUX_MIN1  1000 # Default
+    param set-default PWM_AUX_MAX1  2000 # Default
+    param set-default PWM_AUX_DIS1  1000 # Default
+    param set-default PWM_AUX_FAIL1 -1   # Default
 
-# PWM AUX Ch. 1 -> Gimbal Roll
-param set-default PWM_MAIN_FUNC1 420
-param set-default PWM_MAIN_MIN1  1000 # Default
-param set-default PWM_MAIN_MAX1  2000 # Default
-param set-default PWM_MAIN_DIS1  1000 # Default
-param set-default PWM_MAIN_FAIL1 -1   # Default
+    # PWM AUX Ch. 2 -> Gimbal Pitch
+    param set-default PWM_AUX_FUNC2 421
+    param set-default PWM_AUX_MIN2  1000 # Default
+    param set-default PWM_AUX_MAX2  2000 # Default
+    param set-default PWM_AUX_DIS2  1000 # Default
+    param set-default PWM_AUX_FAIL2 -1   # Default
 
-# PWM AUX Ch. 2 -> Gimbal Pitch
-param set-default PWM_MAIN_FUNC2 421
-param set-default PWM_MAIN_MIN2  1000 # Default
-param set-default PWM_MAIN_MAX2  2000 # Default
-param set-default PWM_MAIN_DIS2  1000 # Default
-param set-default PWM_MAIN_FAIL2 -1   # Default
+    ## PWM AUX Ch. 4 -> Also Gimbal Pitch
+    ## (Duplicate, reversed output for use with two pitch servos)
+    #param set-default PWM_AUX_FUNC4 421
+    #param set-default PWM_AUX_MIN4  1000 # Default
+    #param set-default PWM_AUX_MAX4  2000 # Default
+    #param set-default PWM_AUX_DIS4  1000 # Default
+    #param set-default PWM_AUX_FAIL4 -1   # Default
+    ## Reverse AUX Ch. 4
+    #param set-default PWM_AUX_REV    0b00010000000
 
-# PWM AUX Ch. 3 -> Gimbal Yaw
-param set-default PWM_MAIN_FUNC3 422
-param set-default PWM_MAIN_MIN3  1000 # Default
-param set-default PWM_MAIN_MAX3  2000 # Default
-param set-default PWM_MAIN_DIS3  1000 # Default
-param set-default PWM_MAIN_FAIL3 -1   # Default
+    # PWM AUX Ch. 3 -> Gimbal Yaw
+    param set-default PWM_AUX_FUNC3 422
+    param set-default PWM_AUX_MIN3  1000 # Default
+    param set-default PWM_AUX_MAX3  2000 # Default
+    param set-default PWM_AUX_DIS3  1000 # Default
+    param set-default PWM_AUX_FAIL3 -1   # Default
 
-# Set PWM Speed to 400Hz
-param set-default PWM_MAIN_TIM0 400
+    # Set PWM Speed to 400Hz
+    param set-default PWM_MAIN_TIM0 400
+
+else
+
+    # PWM MAIN Ch. 1 -> Gimbal Roll
+    param set-default PWM_MAIN_FUNC1 420
+    param set-default PWM_MAIN_MIN1  1000 # Default
+    param set-default PWM_MAIN_MAX1  2000 # Default
+    param set-default PWM_MAIN_DIS1  1000 # Default
+    param set-default PWM_MAIN_FAIL1 -1   # Default
+
+    # PWM MAIN Ch. 2 -> Gimbal Pitch
+    param set-default PWM_MAIN_FUNC2 421
+    param set-default PWM_MAIN_MIN2  1000 # Default
+    param set-default PWM_MAIN_MAX2  2000 # Default
+    param set-default PWM_MAIN_DIS2  1000 # Default
+    param set-default PWM_MAIN_FAIL2 -1   # Default
+
+    ## PWM MAIN Ch. 4 -> Also Gimbal Pitch
+    ## (Duplicate, reversed output for use with two pitch servos)
+    #param set-default PWM_MAIN_FUNC4 421
+    #param set-default PWM_MAIN_MIN4  1000 # Default
+    #param set-default PWM_MAIN_MAX4  2000 # Default
+    #param set-default PWM_MAIN_DIS4  1000 # Default
+    #param set-default PWM_MAIN_FAIL4 -1   # Default
+    ## Reverse MAIN Ch. 4
+    #param set-default PWM_MAIN_REV    0b00010000000
+
+    # PWM MAIN Ch. 3 -> Gimbal Yaw
+    param set-default PWM_MAIN_FUNC3 422
+    param set-default PWM_MAIN_MIN3  1000 # Default
+    param set-default PWM_MAIN_MAX3  2000 # Default
+    param set-default PWM_MAIN_DIS3  1000 # Default
+    param set-default PWM_MAIN_FAIL3 -1   # Default
+
+    # Set PWM Speed to 400Hz
+    param set-default PWM_MAIN_TIM0 400
+
+fi
 
 # Start the PWM output driver module
 pwm_out start
