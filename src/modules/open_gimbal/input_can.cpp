@@ -68,8 +68,14 @@ int InputCAN::initialize()
 InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &control_data, bool already_active)
 {
 	// Read the new data from the gimbal_manager_set_attitude topic only if there is new data
-	if (_gimbal_manager_set_attitude_sub.update(&_gimbal_manager_set_attitude)
-	    && _gimbal_manager_set_attitude.q != control_data.type_data.angle.q) {
+	if (_gimbal_manager_set_attitude_sub.update(&_gimbal_manager_set_attitude)) {
+
+		for (int i = 0; i < 4; i++) {
+			if (!PX4_ISFINITE(_gimbal_manager_set_attitude.q[i])) {
+				// Invalid data
+				return UpdateResult::NoUpdate;
+			}
+		}
 
 		// Update the setpoint
 		(matrix::Quatf(_gimbal_manager_set_attitude.q)).copyTo(control_data.type_data.angle.q);
@@ -83,7 +89,7 @@ InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &co
 		control_data.type_data.angle.angular_velocity[2] = NAN;
 
 		// Debug: Print a status message
-		PX4_INFO("Received new gimbal attitude from InputCAN!");
+		//PX4_INFO("Received new gimbal attitude from InputCAN!");
 
 		return UpdateResult::UpdatedActive;
 	}
