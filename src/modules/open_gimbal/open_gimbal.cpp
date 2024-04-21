@@ -31,6 +31,9 @@
  *
  ****************************************************************************/
 
+// OpenGimbal Version
+#define OG_VERSION "2.0.8"
+
 #include <cstdint>
 #include <stdlib.h>
 #include <string.h>
@@ -58,6 +61,12 @@
 #include <uORB/topics/vehicle_command.h>
 #include <uORB/topics/gimbal_device_information.h>
 
+#include <uORB/Publication.hpp>
+#include <uORB/topics/vehicle_attitude.h>
+
+uORB::Publication<vehicle_attitude_s> _vehicle_attitude_pub{ORB_ID(vehicle_attitude)};
+vehicle_attitude_s att = {0};
+
 // Polling refresh rate in microseconds
 #define REFRESH_RATE_US ( 100U )
 
@@ -70,11 +79,15 @@ static px4::atomic<bool> thread_running {false};
 static constexpr int input_objs_len_max = 2;
 
 struct ThreadData {
+	bool initialized = false;
+
 	InputBase *input_objs[input_objs_len_max] = { nullptr, nullptr };
 	int input_objs_len = 0;
 	int last_input_active = -1;
+
 	InputTest *test_input = nullptr;
 	OutputBase *output_obj = nullptr;
+
 	ControlData control_data = { 0 };
 	Parameters thread_params {};
 };
@@ -84,6 +97,7 @@ static ThreadData *g_thread_data = nullptr;
 // Subscribe to VehicleAttitude
 uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
 vehicle_attitude_s g_vehicle_attitude{};
+static matrix::Quatf g_q_vehicle_attitude;
 
 // Subscribe to VehicleCommand
 uORB::Subscription _vehicle_command_sub{ORB_ID(vehicle_command)};
@@ -99,6 +113,7 @@ static constexpr char _gimbal_vendor_name[GIMBAL_INFO_MAX_NAME_LEN] = "ARK Elect
 static constexpr char _gimbal_model_name[GIMBAL_INFO_MAX_NAME_LEN] = "Open-Gimbal";
 static constexpr char _gimbal_custom_name[GIMBAL_INFO_MAX_NAME_LEN] = "";
 
+int init(int argc, char *argv[]);
 static void usage();
 static void update_params(ParameterHandles &param_handles, Parameters &params);
 static bool initialize_params(ParameterHandles &param_handles, Parameters &params);
@@ -106,10 +121,26 @@ static bool initialize_params(ParameterHandles &param_handles, Parameters &param
 static int open_gimbal_thread_main(int argc, char *argv[]);
 extern "C" __EXPORT int open_gimbal_main(int argc, char *argv[]);
 
-static bool _update_vehicle_attitude(bool must_update = false)
+static bool _update_vehicle_attitude()
 {
-	// Return true if the vehicle attitude was updated, or if we don't care about new data
-	return (!_vehicle_attitude_sub.update(&g_vehicle_attitude) ? !must_update : true);
+	if (_vehicle_attitude_sub.update(&g_vehicle_attitude)) {
+		g_q_vehicle_attitude = matrix::Quatf(g_vehicle_attitude.q);
+		return true;
+	}
+
+	return false;
+}
+
+void _print_quat(const matrix::Quatf &q)
+{
+	// Convert the quaternion to Euler angles
+	matrix::Eulerf euler_angles(q);
+
+	PX4_INFO_RAW("Euler Angle Form (deg)\n");
+	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(euler_angles(0) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(euler_angles(1) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(euler_angles(2) * M_RAD_TO_DEG_F));
+	PX4_INFO_RAW("\n");
 }
 
 static void _provide_gimbal_device_information()
@@ -227,7 +258,7 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	while (!thread_should_exit.load() && i++ < 100) {
 
 		// Check vehicle attitude
-		if (_update_vehicle_attitude(true)) {
+		if (_update_vehicle_attitude()) {
 			break;
 		}
 
@@ -237,7 +268,14 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	static bool new_setpoints = false;
 	static InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
 
-	PX4_INFO("Initialization complete!");
+	// Initialize the zero setpoints if they are not already set
+	if (!g_thread_data->initialized && init(0, NULL) != PX4_OK) {
+		PX4_ERR("Initialization failed, exiting gimbal thread...");
+		thread_should_exit.store(true);
+
+	} else {
+		PX4_INFO("Initialization complete!");
+	}
 
 	while (!thread_should_exit.load()) {
 
@@ -320,6 +358,55 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	thread_running.store(false);
 
 	PX4_INFO("Deinitialization complete, exiting...");
+
+	return PX4_OK;
+}
+
+int init(int argc, char *argv[])
+{
+	if (!strcmp(argv[2], "-r")) {
+		// Reset offsets
+		PX4_INFO("Resetting offsets...");
+
+		// Reset the axis offsets
+		g_thread_data->control_data.q_zero_setpoint = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+		PX4_INFO("Offsets reset!");
+
+	} else if (!strcmp(argv[2], "-h")) {
+		usage();
+		return PX4_OK;
+
+	} else if (g_thread_data->initialized) {
+		PX4_WARN("Already initialized!");
+		PX4_WARN("Use '%s %s -r' to reset offsets if desired.", argv[0], argv[1]);
+		return PX4_OK;
+
+	} else {
+		// Initialize the axis offsets
+		PX4_INFO("Initializing...");
+		PX4_INFO("Please hold the gimbal payload in the desired orientation and press any key to continue...");
+
+		// Wait for user input
+		(void)getchar();
+
+		// Get the current vehicle attitude
+		if (_update_vehicle_attitude()) {
+
+			// Get a copy of the zero setpoint
+			g_thread_data->control_data.q_zero_setpoint = g_q_vehicle_attitude;
+
+			PX4_INFO("Zero setpoint quaternion:");
+			_print_quat(g_thread_data->control_data.q_zero_setpoint);
+
+		} else {
+			PX4_ERR("Error getting vehicle attitude! :(");
+			PX4_ERR("Initialization failed!");
+			return PX4_ERROR;
+		}
+	}
+
+	g_thread_data->initialized = true;
 
 	return PX4_OK;
 }
@@ -489,38 +576,18 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
-void _print_quat(const matrix::Quatf &q)
-{
-	// Convert the quaternion to Euler angles
-	matrix::Eulerf euler_angles(q);
-
-	PX4_INFO_RAW("Euler Angle Form (deg)\n");
-	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(euler_angles(0) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(euler_angles(1) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(euler_angles(2) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("\n");
-}
-
 //! This will be deleted later
 int get_orientation(int argc, char *argv[])
 {
 	// Get the current vehicle attitude
 	if (_update_vehicle_attitude()) {
 
-		// Convert to a matrix::Quaternion
-		matrix::Quatf q(
-			g_vehicle_attitude.q[0],
-			g_vehicle_attitude.q[1],
-			g_vehicle_attitude.q[2],
-			g_vehicle_attitude.q[3]
-		);
-
 		PX4_INFO_RAW("\n");
 
 		// Print the Euler angles
 		PX4_INFO_RAW("/* Vehicle Attitude Quaternion ****************/\n\n");
 
-		_print_quat(q);
+		_print_quat(g_q_vehicle_attitude);
 
 		PX4_INFO_RAW("/* Setpoint Quaternion ************************/\n\n");
 
@@ -545,14 +612,25 @@ int get_orientation(int argc, char *argv[])
 
 int open_gimbal_main(int argc, char *argv[])
 {
+	att.timestamp = hrt_absolute_time();
+	_vehicle_attitude_pub.publish(att);
+
 	if (argc < 2) {
 		PX4_ERR("missing command");
 		usage();
 		return PX4_ERROR;
-	}
 
-	if (!strcmp(argv[1], "start")) {
+	} else if (!strcmp(argv[1], "start")) {
 		return start();
+
+	} else if (!strcmp(argv[1], "init")) {
+		return init(argc, argv);
+
+	} else if (!strcmp(argv[1], "test")) {
+		return test(argc, argv);
+
+	} else if (!strcmp(argv[1], "get_orientation")) {
+		return get_orientation(argc, argv);
 
 	} else if (!strcmp(argv[1], "stop")) {
 		return stop();
@@ -560,16 +638,11 @@ int open_gimbal_main(int argc, char *argv[])
 	} else if (!strcmp(argv[1], "status")) {
 		return status();
 
-	} else if (!strcmp(argv[1], "get_orientation")) {
-		return get_orientation(argc, argv);
-
-	} else if (!strcmp(argv[1], "test")) {
-		return test(argc, argv);
-
 	}
 
-	PX4_ERR("unrecognized command '%s'", argv[1]);
+	PX4_ERR("Unrecognized command '%s'", argv[1]);
 	usage();
+
 	return PX4_ERROR;
 }
 
@@ -696,8 +769,13 @@ $ open_gimbal test pitch -45 yaw 30
 
 	PRINT_MODULE_USAGE_NAME("open_gimbal", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("init", "Set the gimbal orientation global zero setpoint");
+	PRINT_MODULE_USAGE_ARG("-r", "Reset the global zero setpoint", false);
+	PRINT_MODULE_USAGE_ARG("-h", "Prints a help message", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
 	PRINT_MODULE_USAGE_ARG("<roll|pitch|yaw <angle>>", "Specify an axis and an angle in degrees", false);
 	PRINT_MODULE_USAGE_COMMAND_DESCR("get_orientation", "Print the current gyro output");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("publish_attitude", "Publish a vehicle attitude message");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
+	PRINT_MODULE_USAGE_COMMAND_DESCR("version", "Current Version: " OG_VERSION);
 }

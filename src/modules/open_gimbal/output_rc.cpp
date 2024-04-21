@@ -38,8 +38,6 @@
 #include <px4_platform_common/defines.h>
 #include <matrix/matrix/math.hpp>
 
-using math::constrain;
-
 namespace open_gimbal
 {
 
@@ -58,7 +56,7 @@ int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 			_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
 
 		} else {
-			PX4_ERR("ControlData type %d not supported", (int)control_data.type);
+			PX4_ERR("ControlData type '%d' not supported", (int)control_data.type);
 			return PX4_ERROR;
 		}
 	}
@@ -66,7 +64,7 @@ int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 	hrt_abstime t = hrt_absolute_time();
 
 	// Calculate the angle outputs
-	if (_calculate_angle_output(t) == PX4_ERROR) {
+	if (_calculate_angle_output(t, control_data.q_zero_setpoint) == PX4_ERROR) {
 		return PX4_ERROR;
 	}
 

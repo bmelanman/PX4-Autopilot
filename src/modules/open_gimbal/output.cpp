@@ -34,10 +34,6 @@
 
 #include "output.h"
 
-#include <math.h>
-#include <mathlib/mathlib.h>
-#include <matrix/math.hpp>
-
 #include <px4_platform_common/defines.h>
 
 namespace open_gimbal
@@ -49,12 +45,12 @@ OutputBase::OutputBase(const Parameters &parameters)
 	_last_update = hrt_absolute_time();
 }
 
-OutputBase::~OutputBase()
-{
-	_vehicle_attitude_sub.unsubscribe();
-	_vehicle_global_position_sub.unsubscribe();
-	_vehicle_land_detected_sub.unsubscribe();
-}
+//OutputBase::~OutputBase()
+//{
+//	_vehicle_attitude_sub.unsubscribe();
+//	_vehicle_global_position_sub.unsubscribe();
+//	_vehicle_land_detected_sub.unsubscribe();
+//}
 
 matrix::Quatf OutputBase::_get_q_setpoint()
 {
@@ -107,7 +103,7 @@ void OutputBase::_set_angle_setpoints(const ControlData &control_data)
 
 #define ANG_ACC_NUL (matrix::Vector3f(0.0f, 0.0f, 0.0f))
 
-int OutputBase::_calculate_angle_output(const hrt_abstime &t)
+int OutputBase::_calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_zero_setpoint)
 {
 	// Check if the vehicle is currently landed
 	//if (_vehicle_land_detected_sub.updated()) {
@@ -136,7 +132,7 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	}
 
 	// Make sure the setpoints are valid
-	if (!_q_setpoint.isAllFinite()) {
+	if (!_q_setpoint.isAllFinite() || !q_zero_setpoint.isAllFinite()) {
 		PX4_ERR("Invalid setpoint quaternions! :(");
 
 		for (i = 0; i < 3; ++i) {
@@ -151,7 +147,9 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	if (rate_controller == nullptr) {
 
 		rate_controller = new RateControl();
-		t_prev = hrt_absolute_time();
+		t_prev = t;
+
+		PX4_WARN("Rate controller initialized HERE! %s:%d", __FILE__, __LINE__);
 	}
 
 	// Set the PID gains
@@ -162,11 +160,11 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	);
 
 	// Convert the vehicle attitude and gimbal setpoint quaternions to euler angles
-	matrix::Eulerf att_current((matrix::Quatf)vehicle_attitude.q);
-	matrix::Eulerf att_setpoint(_q_setpoint);
+	matrix::Eulerf att_current(matrix::Quatf(vehicle_attitude.q));
+	matrix::Eulerf att_setpoint(q_zero_setpoint * _q_setpoint.inversed()); // Debug: Inverted?
 
 	// Get the current timestamp and calculate the time difference
-	hrt_abstime t_now = hrt_absolute_time();
+	hrt_abstime t_now = t;
 
 	// TODO: Add _landed check to update
 	bool _is_landed = false;
@@ -185,34 +183,20 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t)
 	//	math::radians(_parameters.mnt_range_yaw)
 	//};
 
-	// TODO: This will need some amount of modification to allow for unlimited yaw rotation
+	// Wrap the axis setpoint around [-pi, pi] and normalize it to the range [-1, 1]
 	for (i = 0; i < 3; ++i) {
-
-		// Get the axis setpoint, wrap it to the range [-pi, pi], and normalize it to the range [-1, 1]
-		_gimbal_outputs[i] = matrix::wrap_pi(gimbal_rate(i)) / M_PI_F;
-
-		//// Apply the angle limit if it is within the range (0, pi)
-		//if (ranges_rad[i] > 0 && ranges_rad[i] < M_PI_F) {
-		//	if (curr_angle > ranges_rad[i]) {
-		//		curr_angle = ranges_rad[i];
-		//	} else if (curr_angle < -ranges_rad[i]) {
-		//		curr_angle = -ranges_rad[i];
-		//	}
-		//}
+		gimbal_rate(i) = matrix::wrap_pi(gimbal_rate(i)) / M_PI_F;
 
 		// Debug: Add the angle in degrees to the outputs array
-		_angle_outputs_deg[i] = _gimbal_outputs[i] * 180.0f;
+		_angle_outputs_deg[i] = math::degrees(gimbal_rate(i));
 	}
 
-	static int cnt = 0;
+	// Roll and pitch can only move +/- 90 degrees from the zero setpoint
+	_gimbal_outputs[_INDEX_ROLL] = math::constrain(gimbal_rate(_INDEX_ROLL), -0.5f, 0.5f);
+	_gimbal_outputs[_INDEX_PITCH] = math::constrain(gimbal_rate(_INDEX_PITCH), -0.5f, 0.5f);
 
-	// Debug: Print the gimbal rate
-	if (cnt++ % 128 == 0) {
-		PX4_INFO("Gimbal Rate [-1, 1]:");
-		PX4_INFO_RAW("  	Roll:  % 4.3f\n", (double)(_gimbal_outputs[0]));
-		PX4_INFO_RAW("  	Pitch: % 4.3f\n", (double)(_gimbal_outputs[1]));
-		PX4_INFO_RAW("  	Yaw:   % 4.3f\n", (double)(_gimbal_outputs[2]));
-	}
+	// Yaw can move infinitely (+/- 180 degrees)
+	_gimbal_outputs[_INDEX_YAW] = gimbal_rate(_INDEX_YAW);
 
 	// constrain pitch to [MNT_LND_P_MIN, MNT_LND_P_MAX] if landed
 	//if (_landed) {

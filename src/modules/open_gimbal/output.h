@@ -40,6 +40,10 @@
 #include <lib/geo/geo.h>
 #include <lib/rate_control/rate_control.hpp>
 
+#include <math.h>
+#include <mathlib/mathlib.h>
+#include <matrix/math.hpp>
+
 #include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/topics/mount_orientation.h>
@@ -54,7 +58,6 @@ namespace open_gimbal
 class OutputBase
 {
 public:
-
 	OutputBase() = delete;
 	explicit OutputBase(const Parameters &parameters);
 	virtual ~OutputBase() = default;
@@ -93,7 +96,8 @@ protected:
 	bool _absolute_angle[3] = {true, true, false };
 
 	/** calculate the _angle_outputs_deg (with speed) and stabilize if needed */
-	int _calculate_angle_output(const hrt_abstime &t);
+	//int _calculate_angle_output(const hrt_abstime &t);
+	int _calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_zero_setpoint);
 
 	float _gimbal_outputs[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [-1, 1]
 

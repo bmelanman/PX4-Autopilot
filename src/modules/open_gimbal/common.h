@@ -36,6 +36,8 @@
 
 #include <stdint.h>
 
+#include <matrix/math.hpp>
+
 namespace open_gimbal
 {
 
@@ -78,6 +80,8 @@ struct ControlData {
 	} type_data;
 
 	Type type = Type::Neutral;
+
+	matrix::Quatf q_zero_setpoint = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 	// TODO: Remove?
 	uint8_t device_compid = 0;
