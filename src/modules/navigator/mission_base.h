@@ -118,12 +118,12 @@ protected:
 	void getNextPositionItems(int32_t start_index, int32_t items_index[], size_t &num_found_items,
 				  uint8_t max_num_items);
 	/**
-	 * @brief Has Mission a Land Start or Land Item
+	 * @brief Mission has a land start, a land, and is valid
 	 *
-	 * @return true If mission has a land start of land item and a land item
+	 * @return true If mission has a land start and a land item and is valid
 	 * @return false otherwise
 	 */
-	bool hasMissionLandStart() const { return _mission.land_start_index >= 0 && _mission.land_index >= 0;};
+	bool hasMissionLandStart() const { return _mission.land_start_index >= 0 && _mission.land_index >= 0 && isMissionValid();};
 	/**
 	 * @brief Go to next Mission Item
 	 * Go to next non jump mission item
@@ -250,8 +250,9 @@ protected:
 	 * @brief Load current mission item
 	 *
 	 * Load current mission item from dataman cache.
+	 * @return true, if the mission item could be loaded, false otherwise
 	 */
-	void loadCurrentMissionItem();
+	bool loadCurrentMissionItem();
 
 	/**
 	 * Set the mission result
@@ -448,7 +449,15 @@ private:
 	 */
 	bool checkMissionDataChanged(mission_s new_mission);
 
+	/**
+	 * @brief update current mission altitude after the home position has changed.
+	 */
+
+	void updateMissionAltAfterHomeChanged();
+
 	bool canRunMissionFeasibility();
+
+	uint32_t _home_update_counter = 0; /**< Variable to store the previous value for home change detection.*/
 
 	bool _align_heading_necessary{false}; // if true, heading of vehicle needs to be aligned with heading of next waypoint. Used to create new mission items for heading alignment.
 
