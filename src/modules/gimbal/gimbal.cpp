@@ -509,11 +509,11 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 }
 
 #define INIT_PARAM(handle, name, err_flag) do { \
-        if ((handle = param_find(name)) == PARAM_INVALID) { \
-            PX4_ERR("failed to find parameter " name); \
-            err_flag = true; \
-        } \
-    } while (0)
+		if ((handle = param_find(name)) == PARAM_INVALID) { \
+			PX4_ERR("failed to find parameter " name); \
+			err_flag = true; \
+		} \
+	} while (0)
 
 bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 {

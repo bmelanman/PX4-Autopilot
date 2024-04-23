@@ -60,7 +60,6 @@ void OutputBase::publish()
 	mount_orientation.attitude_euler_angle[0] = _angle_outputs[0];
 	mount_orientation.attitude_euler_angle[1] = _angle_outputs[1];
 	mount_orientation.attitude_euler_angle[2] = _angle_outputs[2];
-	mount_orientation.attitude_euler_angle[3] = _angle_outputs[3];
 
 	if (!_mount_orientation_pub.publish(mount_orientation)) {
 		PX4_ERR("Mount orientation publication failed");
