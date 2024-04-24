@@ -86,7 +86,7 @@ protected:
 
 	matrix::Quatf _q_setpoint = matrix::Quatf(NAN, NAN, NAN, NAN);   ///< can be NAN if not specifically set
 
-	RateControl *rate_controller = nullptr; ///< rate controller for the gimbal
+	RateControl *_rate_controller = nullptr; ///< rate controller for the gimbal
 	hrt_abstime t_prev = 0;
 
 	bool _stabilize[3] = { false, false, false };

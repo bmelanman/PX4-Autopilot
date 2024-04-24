@@ -43,6 +43,7 @@ OutputBase::OutputBase(const Parameters &parameters)
 	: _parameters(parameters)
 {
 	_last_update = hrt_absolute_time();
+	_rate_controller = new RateControl();
 }
 
 //OutputBase::~OutputBase()
@@ -144,16 +145,16 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_ze
 	}
 
 	// Make sure the rate controller is initialized
-	if (rate_controller == nullptr) {
+	if (_rate_controller == nullptr) {
 
-		rate_controller = new RateControl();
+		_rate_controller = new RateControl();
 		t_prev = t;
 
 		PX4_WARN("Rate controller initialized HERE! %s:%d", __FILE__, __LINE__);
 	}
 
 	// Set the PID gains
-	rate_controller->setPidGains( // Roll, Pitch, Yaw
+	_rate_controller->setPidGains( // Roll, Pitch, Yaw
 		matrix::Vector3f(_parameters.mnt_roll_p, _parameters.mnt_pitch_p, _parameters.mnt_yaw_p), // P Gain
 		matrix::Vector3f(_parameters.mnt_roll_i, _parameters.mnt_pitch_i, _parameters.mnt_yaw_i), // I Gain
 		matrix::Vector3f(_parameters.mnt_roll_d, _parameters.mnt_pitch_d, _parameters.mnt_yaw_d)  // D Gain
@@ -170,7 +171,7 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_ze
 	bool _is_landed = false;
 
 	// Pass the euler angles to the rate controller
-	matrix::Vector3f gimbal_rate = rate_controller->update(
+	matrix::Vector3f gimbal_rate = _rate_controller->update(
 					       att_current, att_setpoint, ANG_ACC_NUL, (t_now - t_prev), _is_landed);
 
 	// Update the previous timestamp
