@@ -52,7 +52,7 @@
 * @reboot_required true
 */
 // TODO: Remove?
-PARAM_DEFINE_INT32(MNT_MODE_IN, -1);
+PARAM_DEFINE_INT32(MNT_MODE_IN, 0);
 
 /**
 * Mount output mode
@@ -80,7 +80,7 @@ PARAM_DEFINE_INT32(MNT_MODE_OUT, 0);
 * @group Mount
 */
 // TODO: Remove?
-PARAM_DEFINE_INT32(MNT_MAV_SYSID, 1);
+//PARAM_DEFINE_INT32(MNT_MAV_SYSID, 1);
 
 /**
 * Mavlink Component ID of the mount
@@ -90,7 +90,7 @@ PARAM_DEFINE_INT32(MNT_MAV_SYSID, 1);
 * @group Mount
 */
 // TODO: Remove?
-PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
+//PARAM_DEFINE_INT32(MNT_MAV_COMPID, 154);
 
 /**
 * Auxiliary channel to control roll (in AUX input or manual mode).
@@ -258,7 +258,7 @@ PARAM_DEFINE_FLOAT(MNT_RATE_YAW, 30.0f);
  * @group Mount
  */
 // TODO: Remove?
-PARAM_DEFINE_INT32(MNT_RC_IN_MODE, 1);
+PARAM_DEFINE_INT32(MNT_RC_IN_MODE, 0);
 
 /**
 * Pitch minimum when landed
@@ -296,3 +296,11 @@ PARAM_DEFINE_FLOAT(MNT_PITCH_D, 0.5f);
 PARAM_DEFINE_FLOAT(MNT_YAW_P, 1.0f);
 PARAM_DEFINE_FLOAT(MNT_YAW_I, 0.5f);
 PARAM_DEFINE_FLOAT(MNT_YAW_D, 0.5f);
+
+// Zero offsets for the gimbal
+PARAM_DEFINE_FLOAT(MNT_MOTOR_ROLL, 0.0f);
+PARAM_DEFINE_FLOAT(MNT_MOTOR_PITCH, 0.0f);
+PARAM_DEFINE_FLOAT(MNT_MOTOR_YAW, 0.0f);
+
+// Debug paramter for whatever one may need it for
+PARAM_DEFINE_INT32(OG_DEBUG, 0);
