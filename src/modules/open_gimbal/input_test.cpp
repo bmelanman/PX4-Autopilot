@@ -52,23 +52,28 @@ InputTest::UpdateResult InputTest::update(unsigned int timeout_ms, ControlData &
 		return UpdateResult::NoUpdate;
 	}
 
-	control_data.type = ControlData::Type::Angle;
+	//control_data.type = ControlData::Type::Angle;
 
-	control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
-	control_data.type_data.angle.frames[1] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
-	control_data.type_data.angle.frames[2] = ControlData::TypeData::TypeAngle::Frame::AngleBodyFrame;
+	//control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
+	//control_data.type_data.angle.frames[1] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
+	//control_data.type_data.angle.frames[2] = ControlData::TypeData::TypeAngle::Frame::AngleBodyFrame;
 
 	matrix::Eulerf euler(
 		math::radians((float)_roll_deg),
 		math::radians((float)_pitch_deg),
 		math::radians((float)_yaw_deg));
-	matrix::Quatf q(euler);
 
-	q.copyTo(control_data.type_data.angle.q);
+	//matrix::Quatf q(euler);
 
-	control_data.type_data.angle.angular_velocity[0] = NAN;
-	control_data.type_data.angle.angular_velocity[1] = NAN;
-	control_data.type_data.angle.angular_velocity[2] = NAN;
+	//q.copyTo(control_data.type_data.angle.q);
+
+	control_data.euler_angle(0) = euler(0);
+	control_data.euler_angle(1) = euler(1);
+	control_data.euler_angle(2) = euler(2);
+
+	//control_data.type_data.angle.angular_velocity[0] = NAN;
+	//control_data.type_data.angle.angular_velocity[1] = NAN;
+	//control_data.type_data.angle.angular_velocity[2] = NAN;
 
 	_new_input_available.store(false);
 

@@ -49,43 +49,44 @@ namespace open_gimbal
  */
 struct ControlData {
 
-	enum class Type {
-		Neutral = 0,
-		Angle,
-		LonLat
-	};
+	//enum class Type {
+	//	Neutral = 0,
+	//	Angle,
+	//	LonLat
+	//};
 
-	union TypeData {
-		struct TypeAngle {
-			float q[4];
-			float angular_velocity[3];
+	matrix::Eulerf euler_angle;
+	//union TypeData {
+	//	struct TypeAngle {
+	//		float q[4];
+	//		float angular_velocity[3];
 
-			enum class Frame : uint8_t {
-				AngleBodyFrame = 0, // Also called follow mode, angle relative to vehicle forward (usually default for yaw axis).
-				AngularRate = 1, // Angular rate set only.
-				AngleAbsoluteFrame = 2 // Also called lock mode, angle relative to horizon/world, lock mode. (usually default for roll and pitch).
-			} frames[3];
-		} angle;
+	//		enum class Frame : uint8_t {
+	//			AngleBodyFrame = 0, // Also called follow mode, angle relative to vehicle forward (usually default for yaw axis).
+	//			AngularRate = 1, // Angular rate set only.
+	//			AngleAbsoluteFrame = 2 // Also called lock mode, angle relative to horizon/world, lock mode. (usually default for roll and pitch).
+	//		} frames[3];
+	//	} angle;
 
-		// TODO: Remove?
-		struct TypeLonLat {
-			double lon; // longitude in deg
-			double lat; // latitude in deg
-			float altitude; // altitude in m
-			float roll_offset; // roll offset in rad
-			float pitch_offset; // pitch offset in rad
-			float yaw_offset;  // yaw offset in rad
-			float pitch_fixed_angle; // ignored if < -pi, otherwise use a fixed pitch angle instead of the altitude
-		} lonlat;
-	} type_data;
+	//	// TODO: Remove?
+	//	struct TypeLonLat {
+	//		double lon; // longitude in deg
+	//		double lat; // latitude in deg
+	//		float altitude; // altitude in m
+	//		float roll_offset; // roll offset in rad
+	//		float pitch_offset; // pitch offset in rad
+	//		float yaw_offset;  // yaw offset in rad
+	//		float pitch_fixed_angle; // ignored if < -pi, otherwise use a fixed pitch angle instead of the altitude
+	//	} lonlat;
+	//} type_data;
 
-	Type type = Type::Neutral;
+	//Type type = Type::Neutral;
 
-	matrix::Quatf q_zero_setpoint = { 0.0f, 0.0f, 0.0f, 1.0f };
+	//matrix::Eulerf euler_zero_setpoint{ 0.0f, 0.0f, 0.0f };
 
 	// TODO: Remove?
-	uint8_t device_compid = 0;
-	uint8_t device_sysid = 0;
+	//uint8_t device_compid = 0;
+	//uint8_t device_sysid = 0;
 };
 
 

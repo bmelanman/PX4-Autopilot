@@ -45,14 +45,14 @@ void InputBase::control_data_set_lon_lat(ControlData &control_data, double lon, 
 		float roll_angle,
 		float pitch_fixed_angle)
 {
-	control_data.type = ControlData::Type::LonLat;
-	control_data.type_data.lonlat.lon = lon;
-	control_data.type_data.lonlat.lat = lat;
-	control_data.type_data.lonlat.altitude = altitude;
-	control_data.type_data.lonlat.roll_offset = roll_angle;
-	control_data.type_data.lonlat.pitch_fixed_angle = pitch_fixed_angle;
-	control_data.type_data.lonlat.pitch_offset = 0.f;
-	control_data.type_data.lonlat.yaw_offset = 0.f;
+	//control_data.type = ControlData::Type::LonLat;
+	//control_data.type_data.lonlat.lon = lon;
+	//control_data.type_data.lonlat.lat = lat;
+	//control_data.type_data.lonlat.altitude = altitude;
+	//control_data.type_data.lonlat.roll_offset = roll_angle;
+	//control_data.type_data.lonlat.pitch_fixed_angle = pitch_fixed_angle;
+	//control_data.type_data.lonlat.pitch_offset = 0.f;
+	//control_data.type_data.lonlat.yaw_offset = 0.f;
 }
 
 

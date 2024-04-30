@@ -73,20 +73,23 @@ InputCAN::UpdateResult InputCAN::update(unsigned int timeout_ms, ControlData &co
 		for (int i = 0; i < 4; i++) {
 			if (!PX4_ISFINITE(_gimbal_manager_set_attitude.q[i])) {
 				// Invalid data
+				PX4_WARN("Invalid gimbal attitude data received from CAN bus!");
 				return UpdateResult::NoUpdate;
 			}
 		}
 
 		// Update the setpoint
-		(matrix::Quatf(_gimbal_manager_set_attitude.q)).copyTo(control_data.type_data.angle.q);
+		//(matrix::Quatf(_gimbal_manager_set_attitude.q)).copyTo(control_data.type_data.angle.q);
 
-		control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
-		control_data.type_data.angle.frames[1] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
-		control_data.type_data.angle.frames[2] = ControlData::TypeData::TypeAngle::Frame::AngleBodyFrame;
+		control_data.euler_angle = matrix::Eulerf(matrix::Quatf(_gimbal_manager_set_attitude.q));
 
-		control_data.type_data.angle.angular_velocity[0] = NAN;
-		control_data.type_data.angle.angular_velocity[1] = NAN;
-		control_data.type_data.angle.angular_velocity[2] = NAN;
+		//control_data.type_data.angle.frames[0] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
+		//control_data.type_data.angle.frames[1] = ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame;
+		//control_data.type_data.angle.frames[2] = ControlData::TypeData::TypeAngle::Frame::AngleBodyFrame;
+
+		//control_data.type_data.angle.angular_velocity[0] = NAN;
+		//control_data.type_data.angle.angular_velocity[1] = NAN;
+		//control_data.type_data.angle.angular_velocity[2] = NAN;
 
 		// Debug: Print a status message
 		//PX4_INFO("Received new gimbal attitude from InputCAN!");
