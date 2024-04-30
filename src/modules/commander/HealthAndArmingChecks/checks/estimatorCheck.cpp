@@ -713,7 +713,7 @@ void EstimatorChecks::lowPositionAccuracy(const Context &context, Report &report
 		const vehicle_local_position_s &lpos) const
 {
 	const bool local_position_valid_but_low_accuracy = !reporter.failsafeFlags().local_position_invalid
-			&& (_param_com_low_eph.get() > FLT_EPSILON && lpos.eph > _param_com_low_eph.get());
+		&& (_param_com_low_eph.get() > FLT_EPSILON && lpos.eph > _param_com_low_eph.get());
 
 	if (!reporter.failsafeFlags().local_position_accuracy_low && local_position_valid_but_low_accuracy) {
 
@@ -863,7 +863,7 @@ void EstimatorChecks::setModeRequirementFlags(const Context &context, bool pre_f
 	vehicle_angular_velocity_s angular_velocity{};
 	_vehicle_angular_velocity_sub.copy(&angular_velocity);
 	const bool condition_angular_velocity_time_valid = angular_velocity.timestamp != 0
-			&& (now < angular_velocity.timestamp + 1_s);
+		&& (now < angular_velocity.timestamp + 1_s);
 	const bool condition_angular_velocity_finite = matrix::Vector3f(angular_velocity.xyz).isAllFinite();
 	const bool angular_velocity_invalid = !condition_angular_velocity_time_valid
 					      || !condition_angular_velocity_finite;
