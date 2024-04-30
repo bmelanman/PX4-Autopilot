@@ -4,7 +4,7 @@
 #------------------------------------------------------------------------------
 
 #------------------------------------------------------------------------------
-# Sensor Paramters and Attitude Estimator Module
+# System Parameters
 #------------------------------------------------------------------------------
 
 # Account for board rotation (Roll: 0, Pitch: 0, Yaw: 90)
@@ -17,38 +17,47 @@ param set-default SENS_IMU_CLPNOTI 0
 param set-default SENS_IMU_AUTOCAL 1
 param set-default SENS_IMU_MODE 1
 
-# Configure sensors
-param set-default CAL_ACC0_PRIO  75 	# High priority
-param set-default CAL_GYRO0_PRIO 75 	# High priority
+# Configure sensor priority to 'high'
+param set-default CAL_ACC0_PRIO  75
+param set-default CAL_GYRO0_PRIO 75
+
+# Disable unused sensors
+param set-default SYS_HAS_GPS 0
+param set-default SYS_HAS_MAG 0
+param set-default SYS_HAS_BARO 0
 
 # Set axis limits
 param set-default FD_FAIL_P 180
 param set-default FD_FAIL_R 180
 
+#------------------------------------------------------------------------------
+# Attitude Q Estimator Module
+#------------------------------------------------------------------------------
+
+# Enable the attitude estimator
+param set-default ATT_EN 1
+
+# Disable acceleration compensation based on GPS velocity
+param set-default ATT_ACC_COMP 1
+# Disable automatic GPS based declination compensation
+param set-default ATT_MAG_DECL_A 1
+
+# Make sure EKF2 is disabled (if it exists)
+if param show -q EKF2_EN
+then
+	echo ""
+	echo "########################"
+	echo "########################"
+	echo "     EKF2 detected!     "
+	echo "########################"
+	echo "########################"
+	echo ""
+	param set-default -s EKF2_EN 0
+	param set EKF2_EN 0
+fi
+
 # Start the attitude estimator
 attitude_estimator_q start
-
-#------------------------------------------------------------------------------
-# Commander Module
-#------------------------------------------------------------------------------
-
-# Disable mag strength check
-param set-default COM_ARM_MAG_STR 0
-# Disable SD card check
-param set-default COM_ARM_SDCARD 0
-# Disable CPU check
-param set-default COM_CPU_MAX -1
-# Disable all power checks
-param set-default CBRK_SUPPLY_CHK 894281
-
-# Allow arming without GPS
-param set-default COM_ARM_WO_GPS 1
-
-# Set the prearmed state to 2 (always)
-param set-default COM_PREARM_MODE 2
-
-# Start the commander module
-commander start
 
 #------------------------------------------------------------------------------
 # PWM Output Module
@@ -133,33 +142,65 @@ fi
 pwm_out start
 
 #------------------------------------------------------------------------------
+# Commander Module
+#------------------------------------------------------------------------------
+
+# Disable unused safety checks
+param set-default COM_ARM_MAG_STR 0
+param set-default COM_ARM_SDCARD 0
+param set-default COM_CPU_MAX -1
+param set-default CBRK_SUPPLY_CHK 894281
+param set-default COM_MOT_TEST_EN 0
+
+# Allow arming without GPS
+param set-default COM_ARM_WO_GPS 1
+
+# Set the prearmed state to 2 (always)
+param set-default COM_PREARM_MODE 2
+
+# Start the commander module
+commander start
+
+#------------------------------------------------------------------------------
 # Open-Gimbal Module
 #------------------------------------------------------------------------------
 
-# Set gimbal output channels
-param set-default MNT_MAN_ROLL      1
-param set-default MNT_MAN_PITCH     2
-param set-default MNT_MAN_YAW       3
-
 # A limit of [-180, 180] is set by default
-#param set-default MNT_RANGE_PITCH   0
-#param set-default MNT_RANGE_ROLL    0
-#param set-default MNT_RANGE_YAW     0
+param set-default MNT_RANGE_PITCH   0
+param set-default MNT_RANGE_ROLL    0
+param set-default MNT_RANGE_YAW     0
 
 # Roll PID Gains
-param set-default MNT_ROLL_P 1.0
-param set-default MNT_ROLL_I 0.5
-param set-default MNT_ROLL_D 0.5
+param set-default MNT_ROLL_P  0.1
+param set-default MNT_ROLL_I 10.0
+param set-default MNT_ROLL_D  0.0
 
 # Pitch PID Gains
-param set-default MNT_PITCH_P 1.0
-param set-default MNT_PITCH_I 0.5
-param set-default MNT_PITCH_D 0.5
+param set-default MNT_PITCH_P  0.1
+param set-default MNT_PITCH_I 10.0
+param set-default MNT_PITCH_D  0.0
 
 # Yaw PID Gains
-#param set-default MNT_YAW_P 1.0
-#param set-default MNT_YAW_I 0.5
-#param set-default MNT_YAW_D 0.5
+param set-default MNT_YAW_P  0.1
+param set-default MNT_YAW_I 10.0
+param set-default MNT_YAW_D  0.0
+
+# Manually setting the motor zero offsets for easier debugging
+param set-default MNT_MOTOR_ROLL  0
+param set-default MNT_MOTOR_PITCH 0
+param set-default MNT_MOTOR_YAW   0
+
+param set OG_DEBUG 128
 
 # Start Open-Gimbal
 open_gimbal start
+
+#param set MNT_ROLL_P   10
+#param set MNT_PITCH_P  10
+#param set MNT_YAW_P    10
+#param set MNT_ROLL_I   1.0
+#param set MNT_PITCH_I  1.0
+#param set MNT_YAW_I    1.0
+#param set MNT_PITCH_D  0.5
+#param set MNT_ROLL_D   0.5
+#param set MNT_YAW_D    0.5
