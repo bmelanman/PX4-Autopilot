@@ -38,6 +38,8 @@
 #include <px4_platform_common/defines.h>
 #include <matrix/matrix/math.hpp>
 
+//#include <uORB/topics/vehicle_attitude.h>
+
 namespace open_gimbal
 {
 
@@ -49,22 +51,14 @@ OutputRC::OutputRC(const Parameters &parameters)
 int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 {
 	// Update if we have new setpoints
-	if (new_setpoints) {
-
-		// Only support angle setpoints
-		if (control_data.type == ControlData::Type::Angle) {
-			_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
-
-		} else {
-			PX4_ERR("ControlData type '%d' not supported", (int)control_data.type);
-			return PX4_ERROR;
-		}
+	if (new_setpoints && _set_angle_setpoints(control_data) != PX4_OK) {
+		return PX4_ERROR;
 	}
 
 	hrt_abstime t = hrt_absolute_time();
 
 	// Calculate the angle outputs
-	if (_calculate_angle_output(t, control_data.q_zero_setpoint) == PX4_ERROR) {
+	if (_calculate_angle_output(t) == PX4_ERROR) {
 		return PX4_ERROR;
 	}
 
@@ -74,34 +68,81 @@ int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 	// Publish the gimbal control outputs
 	gimbal_controls_s gimbal_controls{};
 
-	gimbal_controls.control[OutputBase::_INDEX_ROLL] = _gimbal_outputs[OutputBase::_INDEX_ROLL];
-	gimbal_controls.control[OutputBase::_INDEX_PITCH] = _gimbal_outputs[OutputBase::_INDEX_PITCH];
-	gimbal_controls.control[OutputBase::_INDEX_YAW] = _gimbal_outputs[OutputBase::_INDEX_YAW];
+	gimbal_controls.control[OutputBase::_INDEX_ROLL] = _gimbal_output_norm[OutputBase::_INDEX_ROLL];
+	gimbal_controls.control[OutputBase::_INDEX_PITCH] = _gimbal_output_norm[OutputBase::_INDEX_PITCH];
+	gimbal_controls.control[OutputBase::_INDEX_YAW] = _gimbal_output_norm[OutputBase::_INDEX_YAW];
 
 	gimbal_controls.timestamp = hrt_absolute_time();
 	_gimbal_controls_pub.publish(gimbal_controls);
 
-	_last_update = t;
+	_last_update_usec = t;
 
 	return PX4_OK;
 }
 
+inline void _print_euler(const matrix::Eulerf &euler, bool rad_to_deg = false)
+{
+	if (rad_to_deg) {
+		PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(euler(0) * M_RAD_TO_DEG_F));
+		PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(euler(1) * M_RAD_TO_DEG_F));
+		PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(euler(2) * M_RAD_TO_DEG_F));
+
+	} else {
+		PX4_INFO_RAW("  Roll:  %8.4f \n", (double)euler(0));
+		PX4_INFO_RAW("  Pitch: %8.4f \n", (double)euler(1));
+		PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)euler(2));
+	}
+}
+
+inline void _print_euler(const float euler[3], bool r2d = false)
+{
+	_print_euler(matrix::Eulerf{euler[0], euler[1], euler[2]}, r2d);
+}
+
+inline void _print_quat(const float q[4], bool r2d = false)
+{
+	// Convert the quaternion to Euler angles
+	_print_euler(matrix::Quatf{q}, r2d);
+}
+
 void OutputRC::print_status() const
 {
-	PX4_INFO("Output: AUX");
+	PX4_INFO("Output: AUX\n");
 
-	// Print the target angles
-	PX4_INFO("Target Angles (deg):");
-	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)(OutputBase::_angle_outputs_deg[OutputBase::_INDEX_ROLL]));
-	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)(OutputBase::_angle_outputs_deg[OutputBase::_INDEX_PITCH]));
-	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)(OutputBase::_angle_outputs_deg[OutputBase::_INDEX_YAW]));
+	static uORB::Subscription _status_vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
+	static vehicle_attitude_s vehicle_attitude{0};
+	static matrix::Eulerf veh_att{0, 0, 0};
 
-	// Print the angles after conversion
-	PX4_INFO("Converted Angles (-1,1):");
-	PX4_INFO_RAW("  Roll:  % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_ROLL]);
-	PX4_INFO_RAW("  Pitch: % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_PITCH]);
-	PX4_INFO_RAW("  Yaw:   % 4.1f\n", (double)_gimbal_outputs[OutputBase::_INDEX_YAW]);
-	PX4_INFO_RAW("%c", '\0');
+	PX4_INFO_RAW("\n/* Vehicle Attitude ***************************/\n");
+
+	// Get the current vehicle attitude
+	if (_status_vehicle_attitude_sub.update(&vehicle_attitude)) {
+		veh_att = matrix::Eulerf(matrix::Quatf(vehicle_attitude.q));
+		_print_euler(veh_att, true);
+
+	} else {
+		PX4_INFO("Vehicle attitude not available\n");
+	}
+
+	matrix::Eulerf motor_offsets{
+		_parameters.mnt_motor_roll,
+		_parameters.mnt_motor_pitch,
+		_parameters.mnt_motor_yaw
+	};
+
+	PX4_INFO_RAW("\n/* Vehicle Attitude with Motor Offset *********/\n");
+	_print_euler(veh_att + motor_offsets, true);
+
+	PX4_INFO_RAW("\n/* Target Setpoint ****************************/\n");
+	_print_euler(_euler_setpoint, true);
+
+	PX4_INFO_RAW("\n/* Output Angles ******************************/\n");
+	_print_euler(_gimbal_output_rad, true);
+
+	PX4_INFO_RAW("\n/* Output to Motors ***************************/\n");
+	_print_euler(_gimbal_output_norm);
+
+	PX4_INFO_RAW("\n/**********************************************/\n");
 }
 
 void OutputRC::_stream_device_attitude_status()
@@ -118,12 +159,12 @@ void OutputRC::_stream_device_attitude_status()
 				       gimbal_device_attitude_status_s::DEVICE_FLAGS_YAW_LOCK;
 
 	matrix::Eulerf euler(
-		_gimbal_outputs[OutputBase::_INDEX_ROLL] * 180.0f,
-		_gimbal_outputs[OutputBase::_INDEX_PITCH] * 180.0f,
-		_gimbal_outputs[OutputBase::_INDEX_YAW] * 180.0f
+		_gimbal_output_norm[OutputBase::_INDEX_ROLL] * 180.0f,
+		_gimbal_output_norm[OutputBase::_INDEX_PITCH] * 180.0f,
+		_gimbal_output_norm[OutputBase::_INDEX_YAW] * 180.0f
 	);
 
-	(matrix::Quatf(euler)).copyTo(attitude_status.q);
+	//(matrix::Quatf(euler)).copyTo(attitude_status.q);
 
 	attitude_status.failure_flags = 0;
 	_attitude_status_pub.publish(attitude_status);

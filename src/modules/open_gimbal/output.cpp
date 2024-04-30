@@ -36,14 +36,39 @@
 
 #include <px4_platform_common/defines.h>
 
+// Minimum and maximum time step in seconds
+#define DELTA_T_MIN 0.001f
+#define DELTA_T_MAX 1.0f
+
+// PID Controller limits
+#define PID_INT_LIM 100.0f // TODO: What should this value be?
+#define PID_OUT_LIM M_1_PI_F // Limited to [-pi, pi]
+
+#define _pid_calculate(pid, sp, val, dt) pid_calculate(pid, sp, val, 0.0f, dt)
+
 namespace open_gimbal
 {
 
 OutputBase::OutputBase(const Parameters &parameters)
 	: _parameters(parameters)
 {
-	_last_update = hrt_absolute_time();
+	_last_update_usec = hrt_absolute_time();
+
 	_rate_controller = new RateControl();
+
+	/* PID Controller */
+	_pid_controller = new PID_t();
+
+	// 0.01f -> Minimum time step of 10ns
+	// PID_MODE_DERIVATIV_CALC -> Ignores the `val_dot` param
+	pid_init(_pid_controller, PID_MODE_DERIVATIV_CALC, DELTA_T_MIN);
+
+	// Set the PID gains
+	pid_set_parameters(
+		_pid_controller,
+		_parameters.mnt_roll_p, _parameters.mnt_roll_i, _parameters.mnt_roll_d,
+		PID_INT_LIM, PID_OUT_LIM
+	);
 }
 
 //OutputBase::~OutputBase()
@@ -53,58 +78,42 @@ OutputBase::OutputBase(const Parameters &parameters)
 //	_vehicle_land_detected_sub.unsubscribe();
 //}
 
-matrix::Quatf OutputBase::_get_q_setpoint()
-{
-	// Debug: For printing the quaternion setpoint
-	return _q_setpoint;
-}
-
 void OutputBase::publish()
 {
 	//mount_orientation_s mount_orientation{};
 
-	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_ROLL] = _angle_outputs_deg[OutputBase::_INDEX_ROLL];
-	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_PITCH] = _angle_outputs_deg[OutputBase::_INDEX_PITCH];
-	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_YAW] = _angle_outputs_deg[OutputBase::_INDEX_YAW];
+	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_ROLL] = _gimbal_output_rad[OutputBase::_INDEX_ROLL];
+	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_PITCH] = _gimbal_output_rad[OutputBase::_INDEX_PITCH];
+	//mount_orientation.attitude_euler_angle[OutputBase::_INDEX_YAW] = _gimbal_output_rad[OutputBase::_INDEX_YAW];
 
 	//mount_orientation.timestamp = hrt_absolute_time();
 
 	//_mount_orientation_pub.publish(mount_orientation);
 }
 
-void OutputBase::_set_angle_setpoints(const ControlData &control_data)
+int OutputBase::_set_angle_setpoints(const ControlData &control_data)
 {
-	// Only support angle setpoints
-	if (control_data.type != ControlData::Type::Angle) {
-		PX4_ERR("_set_angle_setpoints called with invalid control_data type: %d", (int)control_data.type);
-		return;
-	}
+	_euler_setpoint = matrix::Eulerf(control_data.euler_angle);
 
-	// Set the absolute angle flags based on the control data
-	for (int i = 0; i < 3; ++i) {
-		switch (control_data.type_data.angle.frames[i]) {
-		case ControlData::TypeData::TypeAngle::Frame::AngleBodyFrame:
-			_absolute_angle[i] = false;
-			break;
-
-		case ControlData::TypeData::TypeAngle::Frame::AngleAbsoluteFrame:
-			_absolute_angle[i] = true;
-			break;
-
-		case ControlData::TypeData::TypeAngle::Frame::AngularRate:
-			PX4_ERR("_set_angle_setpoints: Angular rate not supported!");
-			break;
-
-		}
-	}
-
-	// Update the setpoint
-	_q_setpoint = matrix::Quatf(control_data.type_data.angle.q);
+	return PX4_OK;
 }
 
-#define ANG_ACC_NUL (matrix::Vector3f(0.0f, 0.0f, 0.0f))
+#define ANG_ACC_0 (matrix::Vector3f(0.0f, 0.0f, 0.0f))
+#define ANG_ACC_1 (matrix::Vector3f(1.0f, 1.0f, 1.0f))
 
-int OutputBase::_calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_zero_setpoint)
+void _print_euler(const matrix::Eulerf &euler, const char *prefix = "")
+{
+	PX4_INFO_RAW(
+		"  %18s: %8.4f, %8.4f, %8.4f\n", prefix, (double)euler(0), (double)euler(1), (double)euler(2)
+	);
+}
+
+void _print_euler(const float euler[3], const char *prefix = "")
+{
+	_print_euler(matrix::Eulerf{euler[0], euler[1], euler[2]}, prefix);
+}
+
+int OutputBase::_calculate_angle_output(const hrt_abstime &t_usec)
 {
 	// Check if the vehicle is currently landed
 	//if (_vehicle_land_detected_sub.updated()) {
@@ -117,42 +126,77 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_ze
 
 	int i;
 
-	// Get the vehicle attitude
+	// Get the vehicle attitude and angular velocity
 	vehicle_attitude_s vehicle_attitude;
+	vehicle_angular_velocity_s vehicle_angular_velocity;
 
-	// Make sure the vehicle attitude is valid
-	if (!_vehicle_attitude_sub.copy(&vehicle_attitude) || !(matrix::Quatf(vehicle_attitude.q)).isAllFinite()) {
+	// Validate the vehicle attitude
+	if (!_vehicle_attitude_sub.copy(&vehicle_attitude)) {
 		PX4_ERR("Failed to get vehicle attitude! :(");
 
 		for (i = 0; i < 3; ++i) {
-			_angle_outputs_deg[i] = 0.0f;
-			_gimbal_outputs[i] = 0.0f;
+			_gimbal_output_rad[i] = 0.0f;
+			_gimbal_output_norm[i] = 0.0f;
 		}
 
 		return PX4_ERROR;
 	}
 
-	// Make sure the setpoints are valid
-	if (!_q_setpoint.isAllFinite() || !q_zero_setpoint.isAllFinite()) {
+	// Validate the vehicle angular velocity
+	if (!_vehicle_angular_velocity_sub.copy(&vehicle_angular_velocity)) {
+		PX4_ERR("Failed to get vehicle angular velocity! :(");
+
+		for (i = 0; i < 3; ++i) {
+			_gimbal_output_rad[i] = 0.0f;
+			_gimbal_output_norm[i] = 0.0f;
+		}
+
+		return PX4_ERROR;
+	}
+
+	// Validate the gimbal setpoints
+	if (!_euler_setpoint.isAllFinite()) {
 		PX4_ERR("Invalid setpoint quaternions! :(");
 
 		for (i = 0; i < 3; ++i) {
-			_angle_outputs_deg[i] = 0.0f;
-			_gimbal_outputs[i] = 0.0f;
+			_gimbal_output_rad[i] = 0.0f;
+			_gimbal_output_norm[i] = 0.0f;
 		}
 
 		return PX4_ERROR;
 	}
 
-	// Make sure the rate controller is initialized
-	if (_rate_controller == nullptr) {
+	// TODO: Add _landed check
+	bool _is_landed = false;
 
-		_rate_controller = new RateControl();
-		t_prev = t;
+	// Get the time delta and constrain it
+	float dt_usec = math::constrain((float)(t_usec - _last_update_usec) / USEC_PER_SEC, DELTA_T_MIN, DELTA_T_MAX);
 
-		PX4_WARN("Rate controller initialized HERE! %s:%d", __FILE__, __LINE__);
-	}
+	// Convert the vehicle attitude to euler angles
+	matrix::Eulerf euler_vehicle{matrix::Quatf(vehicle_attitude.q)};
 
+	// Convert the vehicle angular velocity to euler angles
+	matrix::Eulerf euler_angular_velocity{
+		vehicle_angular_velocity.xyz[0],
+		vehicle_angular_velocity.xyz[1],
+		vehicle_angular_velocity.xyz[2]
+	};
+
+	// Get the zero offsets for the motors
+	const matrix::Eulerf zero_offsets{
+		_parameters.mnt_motor_roll,
+		_parameters.mnt_motor_pitch,
+		_parameters.mnt_motor_yaw
+	};
+
+	// Get the current angle offsets and ranges
+	//const matrix::Eulerf ranges_rad = {
+	//	math::radians(_parameters.mnt_range_roll),
+	//	math::radians(_parameters.mnt_range_pitch),
+	//	math::radians(_parameters.mnt_range_yaw)
+	//};
+
+	/* RateController */
 	// Set the PID gains
 	_rate_controller->setPidGains( // Roll, Pitch, Yaw
 		matrix::Vector3f(_parameters.mnt_roll_p, _parameters.mnt_pitch_p, _parameters.mnt_yaw_p), // P Gain
@@ -160,50 +204,73 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t, matrix::Quatf q_ze
 		matrix::Vector3f(_parameters.mnt_roll_d, _parameters.mnt_pitch_d, _parameters.mnt_yaw_d)  // D Gain
 	);
 
-	// Convert the vehicle attitude and gimbal setpoint quaternions to euler angles
-	matrix::Eulerf att_current(matrix::Quatf(vehicle_attitude.q));
-	matrix::Eulerf att_setpoint(q_zero_setpoint * _q_setpoint.inversed()); // Debug: Inverted?
+	// Pass the euler angles to the rate controller (returns the gimbal rates in radians)
+	matrix::Eulerf updated_rate = _rate_controller->update(
+					      euler_vehicle, _euler_setpoint, euler_angular_velocity,
+					      dt_usec, _is_landed) * M_1_PI_F;
 
-	// Get the current timestamp and calculate the time difference
-	hrt_abstime t_now = t;
+	// Calculate the PID output
+	//float pid[3] = {0.0f, 0.0f, 0.0f};
 
-	// TODO: Add _landed check to update
-	bool _is_landed = false;
-
-	// Pass the euler angles to the rate controller
-	matrix::Vector3f gimbal_rate = _rate_controller->update(
-					       att_current, att_setpoint, ANG_ACC_NUL, (t_now - t_prev), _is_landed);
-
-	// Update the previous timestamp
-	t_prev = t_now;
-
-	// Get the current angle offsets and ranges
-	//const float ranges_rad[3] = {
-	//	math::radians(_parameters.mnt_range_roll),
-	//	math::radians(_parameters.mnt_range_pitch),
-	//	math::radians(_parameters.mnt_range_yaw)
-	//};
-
-	// Wrap the axis setpoint around [-pi, pi] and normalize it to the range [-1, 1]
+	// Wrap the output and normalize it
 	for (i = 0; i < 3; ++i) {
-		gimbal_rate(i) = matrix::wrap_pi(gimbal_rate(i)) / M_PI_F;
 
-		// Debug: Add the angle in degrees to the outputs array
-		_angle_outputs_deg[i] = math::degrees(gimbal_rate(i));
+		// Start with the setpoint
+		_gimbal_output_rad[i] = _euler_setpoint(i);
+		//_gimbal_output_rad[i] = euler_vehicle(i);
+
+		// Add the rate output
+		_gimbal_output_rad[i] += (float)((double)dt_usec / USEC_PER_SEC) * euler_angular_velocity(i);
+		//pid[i] = _pid_calculate(_pid_controller, _euler_setpoint(i), euler_vehicle(i), dt_usec);
+		//_gimbal_output_rad[i] += pid[i];
+		//_gimbal_output_rad[i] += updated_rate(i);
+
+		// Account for the vehicle attitude
+		_gimbal_output_rad[i] -= euler_vehicle(i);
+
+		// Account for the motor zero poiont offset
+		//_gimbal_output_rad[i] -= zero_offsets(i);
+
+		// Make sure the output is within the range [-pi, pi]
+		_gimbal_output_rad[i] = matrix::wrap_pi(_gimbal_output_rad[i]);
+
+		// Constrain the output to the (optionally) given range
+		//_gimbal_output_rad[i] = math::constrain(_gimbal_output_rad[i], -ranges_rad(i), ranges_rad(i));
+
+		// Normalize the output to [-1, 1]
+		_gimbal_output_norm[i] = _gimbal_output_rad[i] / M_PI_F;
+	}
+
+	static uint32_t counter = 0;
+
+	if (_parameters.og_debug > 0 && counter++ % _parameters.og_debug == 0) {
+
+		PX4_INFO("Gimbal outputs:");
+		_print_euler(euler_vehicle, "euler_vehicle");
+		_print_euler(euler_angular_velocity, "euler_angular_velocity");
+		_print_euler(_euler_setpoint, "euler_setpoint");
+		_print_euler(updated_rate, "updated_rate");
+		//_print_euler(pid, "pid");
+		_print_euler(_gimbal_output_rad, "gimbal_output_rad");
+		_print_euler(_gimbal_output_norm, "gimbal_output_norm");
+		PX4_INFO_RAW("  %18s: %8.4f (usec)\n\n", "dt_usec", (double)dt_usec);
 	}
 
 	// Roll and pitch can only move +/- 90 degrees from the zero setpoint
-	_gimbal_outputs[_INDEX_ROLL] = math::constrain(gimbal_rate(_INDEX_ROLL), -0.5f, 0.5f);
-	_gimbal_outputs[_INDEX_PITCH] = math::constrain(gimbal_rate(_INDEX_PITCH), -0.5f, 0.5f);
+	//_gimbal_output_norm[_INDEX_ROLL] = math::constrain(updated_rate(_INDEX_ROLL), -0.5f, 0.5f);
+	//_gimbal_output_norm[_INDEX_PITCH] = math::constrain(updated_rate(_INDEX_PITCH), -0.5f, 0.5f);
 
-	// Yaw can move infinitely (+/- 180 degrees)
-	_gimbal_outputs[_INDEX_YAW] = gimbal_rate(_INDEX_YAW);
+	//_gimbal_output_norm[_INDEX_ROLL] = updated_rate(_INDEX_ROLL);
+	//_gimbal_output_norm[_INDEX_PITCH] = updated_rate(_INDEX_PITCH);
+
+	//// Yaw can move infinitely (+/- 180 degrees)
+	//_gimbal_output_norm[_INDEX_YAW] = updated_rate(_INDEX_YAW);
 
 	// constrain pitch to [MNT_LND_P_MIN, MNT_LND_P_MAX] if landed
 	//if (_landed) {
-	//	if (PX4_ISFINITE(_angle_outputs_deg[1])) {
-	//		_angle_outputs_deg[1] = _translate_angle2gimbal(
-	//					    _angle_outputs_deg[1],
+	//	if (PX4_ISFINITE(_gimbal_output_rad[1])) {
+	//		_gimbal_output_rad[1] = _translate_angle2gimbal(
+	//					    _gimbal_output_rad[1],
 	//					    _parameters.mnt_off_pitch,
 	//					    _parameters.mnt_range_pitch);
 	//	}

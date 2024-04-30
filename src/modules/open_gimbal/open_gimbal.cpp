@@ -32,7 +32,7 @@
  ****************************************************************************/
 
 // OpenGimbal Version
-#define OG_VERSION "2.0.8"
+#define OG_VERSION "2.2.3"
 
 #include <cstdint>
 #include <stdlib.h>
@@ -62,13 +62,13 @@
 #include <uORB/topics/gimbal_device_information.h>
 
 #include <uORB/Publication.hpp>
+#include <uORB/topics/gimbal_controls.h>
 #include <uORB/topics/vehicle_attitude.h>
 
-uORB::Publication<vehicle_attitude_s> _vehicle_attitude_pub{ORB_ID(vehicle_attitude)};
-vehicle_attitude_s att = {0};
-
 // Polling refresh rate in microseconds
-#define REFRESH_RATE_US ( 100U )
+#define REFRESH_RATE_US ( (useconds_t)( 1e4 ) )
+
+#define M_180_DEG_F 180.0f
 
 using namespace time_literals;
 using namespace open_gimbal;
@@ -88,16 +88,19 @@ struct ThreadData {
 	InputTest *test_input = nullptr;
 	OutputBase *output_obj = nullptr;
 
-	ControlData control_data = { 0 };
+	ControlData control_data{};
 	Parameters thread_params {};
 };
 
 static ThreadData *g_thread_data = nullptr;
 
+// Convert a float quat[4] to a matrix::Eulerf
+#define QUAT_TO_MATRIX_EULERF(quat) (matrix::Eulerf(matrix::Quatf(quat)))
+
 // Subscribe to VehicleAttitude
 uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
-vehicle_attitude_s g_vehicle_attitude{};
-static matrix::Quatf g_q_vehicle_attitude;
+static vehicle_attitude_s g_vehicle_attitude{};
+static matrix::Eulerf g_euler_vehicle_attitude;
 
 // Subscribe to VehicleCommand
 uORB::Subscription _vehicle_command_sub{ORB_ID(vehicle_command)};
@@ -107,13 +110,16 @@ vehicle_command_s vehicle_command{};
 uORB::Publication<gimbal_device_information_s> _gimbal_device_information_pub{ORB_ID(gimbal_device_information)};
 gimbal_device_information_s gimbal_device_information{};
 
+// Publish to GimbalControls
+static uORB::Publication<gimbal_controls_s> _gimbal_controls_pub{ORB_ID(gimbal_controls)};
+
 // Gimbal Metadata
 #define GIMBAL_INFO_MAX_NAME_LEN ( 32U )
 static constexpr char _gimbal_vendor_name[GIMBAL_INFO_MAX_NAME_LEN] = "ARK Electronics";
 static constexpr char _gimbal_model_name[GIMBAL_INFO_MAX_NAME_LEN] = "Open-Gimbal";
 static constexpr char _gimbal_custom_name[GIMBAL_INFO_MAX_NAME_LEN] = "";
 
-int init(int argc, char *argv[]);
+int init(ThreadData *thread_data);
 static void usage();
 static void update_params(ParameterHandles &param_handles, Parameters &params);
 static bool initialize_params(ParameterHandles &param_handles, Parameters &params);
@@ -124,23 +130,13 @@ extern "C" __EXPORT int open_gimbal_main(int argc, char *argv[]);
 static bool _update_vehicle_attitude()
 {
 	if (_vehicle_attitude_sub.update(&g_vehicle_attitude)) {
-		g_q_vehicle_attitude = matrix::Quatf(g_vehicle_attitude.q);
+		g_euler_vehicle_attitude = QUAT_TO_MATRIX_EULERF(g_vehicle_attitude.q);
 		return true;
 	}
 
+	PX4_ERR("Error getting vehicle attitude! :(");
+
 	return false;
-}
-
-void _print_quat(const matrix::Quatf &q)
-{
-	// Convert the quaternion to Euler angles
-	matrix::Eulerf euler_angles(q);
-
-	PX4_INFO_RAW("Euler Angle Form (deg)\n");
-	PX4_INFO_RAW("  Roll:  %8.4f \n", (double)(euler_angles(0) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  Pitch: %8.4f \n", (double)(euler_angles(1) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)(euler_angles(2) * M_RAD_TO_DEG_F));
-	PX4_INFO_RAW("\n");
 }
 
 static void _provide_gimbal_device_information()
@@ -181,7 +177,8 @@ static void _provide_gimbal_device_information()
 		gimbal_device_information.yaw_min = -(g_thread_data->thread_params.mnt_range_yaw) * M_DEG_TO_RAD_F;
 		gimbal_device_information.yaw_max = (g_thread_data->thread_params.mnt_range_yaw) * M_DEG_TO_RAD_F;
 
-		gimbal_device_information.gimbal_device_compid = g_thread_data->thread_params.mnt_mav_compid;
+		// TODO: What should this value be?
+		gimbal_device_information.gimbal_device_compid = 0;
 	}
 }
 
@@ -212,6 +209,12 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 	// Set the thread status
 	thread_running.store(true);
+
+	// Exit if not initialized
+	//if (init(g_thread_data) != PX4_OK) {
+	//	PX4_ERR("Could not initialize, exiting...");
+	//	return PX4_ERROR;
+	//}
 
 	// Subscribe to parameter updates
 	uORB::SubscriptionInterval parameter_update_sub{ORB_ID(parameter_update), 1_s};
@@ -267,15 +270,6 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 
 	static bool new_setpoints = false;
 	static InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
-
-	// Initialize the zero setpoints if they are not already set
-	if (!g_thread_data->initialized && init(0, NULL) != PX4_OK) {
-		PX4_ERR("Initialization failed, exiting gimbal thread...");
-		thread_should_exit.store(true);
-
-	} else {
-		PX4_INFO("Initialization complete!");
-	}
 
 	while (!thread_should_exit.load()) {
 
@@ -362,51 +356,91 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 	return PX4_OK;
 }
 
-int init(int argc, char *argv[])
+//////////////////////////////////////////////////////////
+// TODO: Move zero position value storage to parameters //
+//////////////////////////////////////////////////////////
+int init(ThreadData *thread_data)
 {
-	if (!strcmp(argv[2], "-r")) {
-		// Reset offsets
-		PX4_INFO("Resetting offsets...");
+	PX4_INFO("Initializing...");
 
-		// Reset the axis offsets
-		g_thread_data->control_data.q_zero_setpoint = { 0.0f, 0.0f, 0.0f, 1.0f };
+	char c = 'n';
 
-		PX4_INFO("Offsets reset!");
+	matrix::Eulerf zero_offsets{0, 0, 0};
+	param_t motor_params[3] = {
+		param_find("MNT_MOTOR_ROLL"),
+		param_find("MNT_MOTOR_PITCH"),
+		param_find("MNT_MOTOR_YAW")
+	};
 
-	} else if (!strcmp(argv[2], "-h")) {
-		usage();
-		return PX4_OK;
+	param_get(motor_params[0], &zero_offsets(0));
+	param_get(motor_params[1], &zero_offsets(1));
+	param_get(motor_params[2], &zero_offsets(2));
 
-	} else if (g_thread_data->initialized) {
-		PX4_WARN("Already initialized!");
-		PX4_WARN("Use '%s %s -r' to reset offsets if desired.", argv[0], argv[1]);
-		return PX4_OK;
+	// Check if the offset params are already non-zero (to avoid unnecessary initialization)
+	if (!(matrix::isEqualF((zero_offsets.abs()).max(), 0.0f))) {
 
-	} else {
+		PX4_WARN(
+			"One or more of the motor offset parameters appear to be non-zero, "
+			"would you like to continue with initialization anyway? (y/N)      "
+		);
+
+		c = getchar();
+	}
+
+	if (c == 'y' || c == 'Y') {
+
 		// Initialize the axis offsets
-		PX4_INFO("Initializing...");
-		PX4_INFO("Please hold the gimbal payload in the desired orientation and press any key to continue...");
+		PX4_INFO("The vehicle will now move to find each motor's zero position, press any key to continue...");
 
 		// Wait for user input
 		(void)getchar();
 
-		// Get the current vehicle attitude
+		// Publish (0, 0, 0) to the gimbal controls
+		gimbal_controls_s gimbal_controls = {0};
+		gimbal_controls.timestamp = hrt_absolute_time();
+		_gimbal_controls_pub.publish(gimbal_controls);
+
+		// Wait for the gimbal to stabilize
+		// TODO: Implement a loop that waits until the changes in attitude are below a certain threshold
+		px4_usleep(1e7);
+
+		// Get a copy of the current vehicle attitude
 		if (_update_vehicle_attitude()) {
 
-			// Get a copy of the zero setpoint
-			g_thread_data->control_data.q_zero_setpoint = g_q_vehicle_attitude;
+			// Set the zero offsets
+			zero_offsets(0) = g_euler_vehicle_attitude(0);
+			zero_offsets(1) = g_euler_vehicle_attitude(1);
+			zero_offsets(2) = g_euler_vehicle_attitude(2);
 
-			PX4_INFO("Zero setpoint quaternion:");
-			_print_quat(g_thread_data->control_data.q_zero_setpoint);
+			g_thread_data->initialized = true;
+
+			PX4_INFO("Zero position has been recorded!");
+
+			// Update the parameters
+			param_set(motor_params[0], &zero_offsets(0));
+			param_set(motor_params[1], &zero_offsets(1));
+			param_set(motor_params[2], &zero_offsets(2));
+
+			PX4_INFO("Parameters updated!");
 
 		} else {
-			PX4_ERR("Error getting vehicle attitude! :(");
 			PX4_ERR("Initialization failed!");
 			return PX4_ERROR;
 		}
 	}
 
-	g_thread_data->initialized = true;
+	PX4_INFO("Initialization complete!");
+
+	PX4_INFO(
+		"Zero position set to:	\n"
+		"  Roll:  %8.4f		\n"
+		"  Pitch: %8.4f		\n"
+		"  Yaw:   %8.4f		\n",
+		(double)(zero_offsets(0) * M_RAD_TO_DEG_F),
+		(double)(zero_offsets(1) * M_RAD_TO_DEG_F),
+		(double)(zero_offsets(2) * M_RAD_TO_DEG_F)
+	);
+
 
 	return PX4_OK;
 }
@@ -422,16 +456,16 @@ int start(void)
 
 	thread_should_exit.store(false);
 
-	// start the task
-	int open_gimbal_task = px4_task_spawn_cmd(
-				       "open_gimbal",
-				       SCHED_DEFAULT,
-				       SCHED_PRIORITY_DEFAULT,
-				       2100,
-				       (px4_main_t)&open_gimbal_thread_main,
-				       (char *const *)nullptr);
+	// start the thread
+	int open_gimbal_thread = px4_task_spawn_cmd(
+					 "open_gimbal",
+					 SCHED_DEFAULT,
+					 SCHED_PRIORITY_DEFAULT,
+					 2100,
+					 (px4_main_t)&open_gimbal_thread_main,
+					 (char *const *)nullptr);
 
-	if (open_gimbal_task < 0) {
+	if (open_gimbal_thread < 0) {
 		PX4_ERR("failed to start");
 		return PX4_ERROR;
 	}
@@ -442,18 +476,18 @@ int start(void)
 		px4_usleep(5000);
 
 		if (++counter >= 100) {
-			PX4_ERR("timed out waiting for task to start");
+			PX4_ERR("Timed out waiting for thread to start, terminating...");
 			thread_should_exit.store(true);
 			return PX4_ERROR;
 		}
 	}
 
 	if (thread_should_exit.load()) {
-		PX4_ERR("task exited during startup");
+		PX4_ERR("thread exited during startup, terminating...");
 		return PX4_ERROR;
 	}
 
-	PX4_INFO("Task started successfully!");
+	PX4_DEBUG("thread started successfully!");
 
 	return PX4_OK;
 }
@@ -506,10 +540,6 @@ int status(void)
 					g_thread_data->input_objs[i]->print_status();
 				}
 			}
-
-			PX4_INFO("Primary control:   %d/%d", 0, 0);
-			// g_thread_data->control_data.sysid_primary_control, g_thread_data->control_data.compid_primary_control);
-
 		}
 
 		if (g_thread_data->output_obj) {
@@ -576,45 +606,44 @@ int test(int argc, char *argv[])
 	return PX4_OK;
 }
 
-//! This will be deleted later
-int get_orientation(int argc, char *argv[])
+int output(int argc, char *argv[])
 {
-	// Get the current vehicle attitude
-	if (_update_vehicle_attitude()) {
+	//if (!thread_running.load()) {
+	//	PX4_WARN("not running");
+	//	usage();
+	//	return PX4_ERROR;
+	//}
 
-		PX4_INFO_RAW("\n");
+	//// Check input arguments: `open_gimbal output <roll> <pitch> <yaw>`
+	//if (argc < 4) {
+	//	PX4_ERR("not enough arguments");
+	//	usage();
+	//	return PX4_ERROR;
+	//}
 
-		// Print the Euler angles
-		PX4_INFO_RAW("/* Vehicle Attitude Quaternion ****************/\n\n");
+	//// Publish the gimbal control outputs
+	//static uORB::Publication<gimbal_controls_s> _gimbal_controls_pub{ORB_ID(gimbal_controls)};
+	//gimbal_controls_s gimbal_controls{0};
 
-		_print_quat(g_q_vehicle_attitude);
+	////gimbal_controls.control[OutputBase::_INDEX_ROLL] = _gimbal_output_norm[OutputBase::_INDEX_ROLL];
+	////gimbal_controls.control[OutputBase::_INDEX_PITCH] = _gimbal_output_norm[OutputBase::_INDEX_PITCH];
+	////gimbal_controls.control[OutputBase::_INDEX_YAW] = _gimbal_output_norm[OutputBase::_INDEX_YAW];
 
-		PX4_INFO_RAW("/* Setpoint Quaternion ************************/\n\n");
+	//gimbal_controls.control[gimbal_controls_s::INDEX_ROLL] = matrix::wrap(strtof(argv[2], nullptr), -(M_180_DEG_F),
+	//	M_180_DEG_F) / M_180_DEG_F;
+	//gimbal_controls.control[gimbal_controls_s::INDEX_PITCH] = matrix::wrap(strtof(argv[3], nullptr), -(M_180_DEG_F),
+	//	M_180_DEG_F) / M_180_DEG_F;
+	//gimbal_controls.control[gimbal_controls_s::INDEX_YAW] = matrix::wrap(strtof(argv[4], nullptr), -(M_180_DEG_F),
+	//	M_180_DEG_F) / M_180_DEG_F;
 
-		_print_quat(g_thread_data->output_obj->_get_q_setpoint());
-
-		PX4_INFO_RAW("/* Output Angles ******************************/\n\n");
-
-		PX4_INFO_RAW("Motor Output:\n");
-		PX4_INFO_RAW("  Roll:  %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs_deg[0]);
-		PX4_INFO_RAW("  Pitch: %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs_deg[1]);
-		PX4_INFO_RAW("  Yaw:   %8.4f \n", (double)g_thread_data->output_obj->_angle_outputs_deg[2]);
-		PX4_INFO_RAW("\n");
-
-		PX4_INFO_RAW("/**********************************************/\n\n");
-
-	} else {
-		PX4_ERR("Error getting vehicle attitude! :(");
-	}
+	//gimbal_controls.timestamp = hrt_absolute_time();
+	//_gimbal_controls_pub.publish(gimbal_controls);
 
 	return PX4_OK;
 }
 
 int open_gimbal_main(int argc, char *argv[])
 {
-	att.timestamp = hrt_absolute_time();
-	_vehicle_attitude_pub.publish(att);
-
 	if (argc < 2) {
 		PX4_ERR("missing command");
 		usage();
@@ -623,14 +652,14 @@ int open_gimbal_main(int argc, char *argv[])
 	} else if (!strcmp(argv[1], "start")) {
 		return start();
 
-	} else if (!strcmp(argv[1], "init")) {
-		return init(argc, argv);
+		//} else if (!strcmp(argv[1], "init")) {
+		//	return init();
 
 	} else if (!strcmp(argv[1], "test")) {
 		return test(argc, argv);
 
-	} else if (!strcmp(argv[1], "get_orientation")) {
-		return get_orientation(argc, argv);
+	} else if (!strcmp(argv[1], "output")) {
+		return output(argc, argv);
 
 	} else if (!strcmp(argv[1], "stop")) {
 		return stop();
@@ -651,8 +680,8 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_mode_in, &params.mnt_mode_in);
 	param_get(param_handles.mnt_mode_out, &params.mnt_mode_out);
 
-	param_get(param_handles.mnt_mav_sysid, &params.mnt_mav_sysid);
-	param_get(param_handles.mnt_mav_compid, &params.mnt_mav_compid);
+	//param_get(param_handles.mnt_mav_sysid, &params.mnt_mav_sysid);
+	//param_get(param_handles.mnt_mav_compid, &params.mnt_mav_compid);
 
 	param_get(param_handles.mnt_man_pitch, &params.mnt_man_pitch);
 	param_get(param_handles.mnt_man_roll, &params.mnt_man_roll);
@@ -668,10 +697,8 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_off_roll, &params.mnt_off_roll);
 	param_get(param_handles.mnt_off_yaw, &params.mnt_off_yaw);
 
-	param_get(param_handles.mav_sysid, &params.mav_sysid);
-	param_get(param_handles.mav_compid, &params.mav_compid);
-	//params.mav_sysid = 0;
-	//params.mav_compid = 0;
+	//param_get(param_handles.mav_sysid, &params.mav_sysid);
+	//param_get(param_handles.mav_compid, &params.mav_compid);
 
 	param_get(param_handles.mnt_rate_pitch, &params.mnt_rate_pitch);
 	param_get(param_handles.mnt_rate_yaw, &params.mnt_rate_yaw);
@@ -692,6 +719,12 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_yaw_p, &params.mnt_yaw_p);
 	param_get(param_handles.mnt_yaw_i, &params.mnt_yaw_i);
 	param_get(param_handles.mnt_yaw_d, &params.mnt_yaw_d);
+
+	param_get(param_handles.mnt_motor_roll, &params.mnt_motor_roll);
+	param_get(param_handles.mnt_motor_pitch, &params.mnt_motor_pitch);
+	param_get(param_handles.mnt_motor_yaw, &params.mnt_motor_yaw);
+
+	param_get(param_handles.og_debug, &params.og_debug);
 }
 
 #define INIT_PARAM(handle, name, err_flag) do { \
@@ -708,8 +741,8 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_mode_in, 		"MNT_MODE_IN", 	    	err_flag);
 	INIT_PARAM(param_handles.mnt_mode_out, 		"MNT_MODE_OUT", 	err_flag);
 
-	INIT_PARAM(param_handles.mnt_mav_sysid, 	"MNT_MAV_SYSID", 	err_flag);
-	INIT_PARAM(param_handles.mnt_mav_compid, 	"MNT_MAV_COMPID", 	err_flag);
+	//INIT_PARAM(param_handles.mnt_mav_sysid, 	"MNT_MAV_SYSID", 	err_flag);
+	//INIT_PARAM(param_handles.mnt_mav_compid, 	"MNT_MAV_COMPID", 	err_flag);
 
 	INIT_PARAM(param_handles.mnt_man_pitch, 	"MNT_MAN_PITCH", 	err_flag);
 	INIT_PARAM(param_handles.mnt_man_roll, 		"MNT_MAN_ROLL", 	err_flag);
@@ -724,6 +757,9 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_off_pitch, 	"MNT_OFF_PITCH", 	err_flag);
 	INIT_PARAM(param_handles.mnt_off_roll, 		"MNT_OFF_ROLL", 	err_flag);
 	INIT_PARAM(param_handles.mnt_off_yaw, 		"MNT_OFF_YAW", 	    	err_flag);
+
+	//INIT_PARAM(param_handles.mav_sysid, 		"MAV_SYSID", 	    	err_flag);
+	//INIT_PARAM(param_handles.mav_compid, 		"MAV_COMPID", 	    	err_flag);
 
 	INIT_PARAM(param_handles.mnt_rate_pitch, 	"MNT_RATE_PITCH", 	err_flag);
 	INIT_PARAM(param_handles.mnt_rate_yaw, 		"MNT_RATE_YAW", 	err_flag);
@@ -744,6 +780,12 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_yaw_p, 		"MNT_YAW_P", 	    	err_flag);
 	INIT_PARAM(param_handles.mnt_yaw_i, 		"MNT_YAW_I", 	    	err_flag);
 	INIT_PARAM(param_handles.mnt_yaw_d, 		"MNT_YAW_D", 	    	err_flag);
+
+	INIT_PARAM(param_handles.mnt_motor_roll,	"MNT_MOTOR_ROLL",    	err_flag);
+	INIT_PARAM(param_handles.mnt_motor_pitch,	"MNT_MOTOR_PITCH",    	err_flag);
+	INIT_PARAM(param_handles.mnt_motor_yaw,		"MNT_MOTOR_YAW",    	err_flag);
+
+	INIT_PARAM(param_handles.og_debug, 		"OG_DEBUG", 	    	err_flag);
 
 	if (!err_flag) {
 		update_params(param_handles, params);
@@ -769,12 +811,10 @@ $ open_gimbal test pitch -45 yaw 30
 
 	PRINT_MODULE_USAGE_NAME("open_gimbal", "driver");
 	PRINT_MODULE_USAGE_COMMAND("start");
-	PRINT_MODULE_USAGE_COMMAND_DESCR("init", "Set the gimbal orientation global zero setpoint");
-	PRINT_MODULE_USAGE_ARG("-r", "Reset the global zero setpoint", false);
-	PRINT_MODULE_USAGE_ARG("-h", "Prints a help message", false);
+	//PRINT_MODULE_USAGE_COMMAND_DESCR("init", "Set the gimbal's zero setpoint");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)");
 	PRINT_MODULE_USAGE_ARG("<roll|pitch|yaw <angle>>", "Specify an axis and an angle in degrees", false);
-	PRINT_MODULE_USAGE_COMMAND_DESCR("get_orientation", "Print the current gyro output");
+	PRINT_MODULE_USAGE_COMMAND_DESCR("output <roll> <pitch> <yaw>", "Write angles (in degrees) directly to the PWM output");
 	PRINT_MODULE_USAGE_COMMAND_DESCR("publish_attitude", "Publish a vehicle attitude message");
 	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
 	PRINT_MODULE_USAGE_COMMAND_DESCR("version", "Current Version: " OG_VERSION);
