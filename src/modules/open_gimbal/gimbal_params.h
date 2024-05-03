@@ -88,7 +88,9 @@ struct Parameters {
 	float mnt_motor_pitch;
 	float mnt_motor_yaw;
 
-	int32_t og_debug;
+	float og_debug1;
+	float og_debug2;
+	float og_debug3;
 };
 
 struct ParameterHandles {
@@ -139,7 +141,9 @@ struct ParameterHandles {
 	param_t mnt_motor_pitch;
 	param_t mnt_motor_yaw;
 
-	param_t og_debug;
+	param_t og_debug1;
+	param_t og_debug2;
+	param_t og_debug3;
 };
 
 } /* namespace gimbal */

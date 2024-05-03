@@ -186,6 +186,10 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 {
 	int i = 0;
 
+	// Debug: For moving the pitch axis up and down
+	hrt_abstime last_time = hrt_absolute_time();
+	int toggle = 1;
+
 	ParameterHandles param_handles;
 	ThreadData thread_data;
 
@@ -268,8 +272,8 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 		px4_usleep(100000);
 	}
 
-	static bool new_setpoints = false;
-	static InputBase::UpdateResult update_result = InputBase::UpdateResult::NoUpdate;
+	static bool new_setpoints, new_params = true;
+	static InputBase::UpdateResult update_result;
 
 	while (!thread_should_exit.load()) {
 
@@ -279,6 +283,7 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			parameter_update_sub.copy(&pupdate);
 
 			update_params(param_handles, thread_data.thread_params);
+			new_params = true;
 		}
 
 		// Check for a new vehicle command
@@ -317,13 +322,23 @@ static int open_gimbal_thread_main(int argc, char *argv[])
 			}
 
 			// Update output
-			if (thread_data.output_obj->update(thread_data.control_data, new_setpoints) == PX4_ERROR) {
+			if (thread_data.output_obj->update(thread_data.control_data, new_setpoints, new_params) == PX4_ERROR) {
 				PX4_ERR("Output update failed, exiting gimbal thread...");
 				thread_should_exit.store(true);
 			}
 
 			// Publish the mount orientation
 			thread_data.output_obj->publish();
+		}
+
+		// Reset the flags
+		new_params = false;
+
+		// Debug: Move the pitch axis up and down by 10 degrees every 5 seconds
+		if (hrt_elapsed_time(&last_time) > 5_s) {
+			thread_data.test_input->set_test_input(0, toggle * 10, 0);
+			last_time = hrt_absolute_time();
+			toggle ^= 1;
 		}
 
 		// Wait for a bit before the next loop
@@ -724,7 +739,9 @@ void update_params(ParameterHandles &param_handles, Parameters &params)
 	param_get(param_handles.mnt_motor_pitch, &params.mnt_motor_pitch);
 	param_get(param_handles.mnt_motor_yaw, &params.mnt_motor_yaw);
 
-	param_get(param_handles.og_debug, &params.og_debug);
+	param_get(param_handles.og_debug1, &params.og_debug1);
+	param_get(param_handles.og_debug2, &params.og_debug2);
+	param_get(param_handles.og_debug3, &params.og_debug3);
 }
 
 #define INIT_PARAM(handle, name, err_flag) do { \
@@ -785,7 +802,9 @@ bool initialize_params(ParameterHandles &param_handles, Parameters &params)
 	INIT_PARAM(param_handles.mnt_motor_pitch,	"MNT_MOTOR_PITCH",    	err_flag);
 	INIT_PARAM(param_handles.mnt_motor_yaw,		"MNT_MOTOR_YAW",    	err_flag);
 
-	INIT_PARAM(param_handles.og_debug, 		"OG_DEBUG", 	    	err_flag);
+	INIT_PARAM(param_handles.og_debug1, 		"OG_DEBUG1", 	    	err_flag);
+	INIT_PARAM(param_handles.og_debug2, 		"OG_DEBUG2", 	    	err_flag);
+	INIT_PARAM(param_handles.og_debug3, 		"OG_DEBUG3", 	    	err_flag);
 
 	if (!err_flag) {
 		update_params(param_handles, params);

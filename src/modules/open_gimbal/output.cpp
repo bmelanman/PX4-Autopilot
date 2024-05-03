@@ -40,11 +40,6 @@
 #define DELTA_T_MIN 0.001f
 #define DELTA_T_MAX 1.0f
 
-// PID Controller limits
-#define PID_INT_LIM 100.0f // TODO: What should this value be?
-#define PID_OUT_LIM M_1_PI_F // Limited to [-pi, pi]
-
-#define _pid_calculate(pid, sp, val, dt) pid_calculate(pid, sp, val, 0.0f, dt)
 
 namespace open_gimbal
 {
@@ -54,21 +49,27 @@ OutputBase::OutputBase(const Parameters &parameters)
 {
 	_last_update_usec = hrt_absolute_time();
 
+	// Initialize the rate controller
 	_rate_controller = new RateControl();
 
-	/* PID Controller */
-	_pid_controller = new PID_t();
+	// Initialize the PID params
+	_param_pid_roll_p = param_find("MNT_ROLL_P");
+	_param_pid_roll_i = param_find("MNT_ROLL_I");
+	_param_pid_roll_d = param_find("MNT_ROLL_D");
+	_param_pid_roll_imax = param_find("MNT_ROLL_IMAX");
+	_param_pid_roll_ff = param_find("MNT_ROLL_FF");
 
-	// 0.01f -> Minimum time step of 10ns
-	// PID_MODE_DERIVATIV_CALC -> Ignores the `val_dot` param
-	pid_init(_pid_controller, PID_MODE_DERIVATIV_CALC, DELTA_T_MIN);
+	_param_pid_pitch_p = param_find("MNT_PITCH_P");
+	_param_pid_pitch_i = param_find("MNT_PITCH_I");
+	_param_pid_pitch_d = param_find("MNT_PITCH_D");
+	_param_pid_pitch_imax = param_find("MNT_PITCH_IMAX");
+	_param_pid_pitch_ff = param_find("MNT_PITCH_FF");
 
-	// Set the PID gains
-	pid_set_parameters(
-		_pid_controller,
-		_parameters.mnt_roll_p, _parameters.mnt_roll_i, _parameters.mnt_roll_d,
-		PID_INT_LIM, PID_OUT_LIM
-	);
+	_param_pid_yaw_p = param_find("MNT_YAW_P");
+	_param_pid_yaw_i = param_find("MNT_YAW_I");
+	_param_pid_yaw_d = param_find("MNT_YAW_D");
+	_param_pid_yaw_imax = param_find("MNT_YAW_IMAX");
+	_param_pid_yaw_ff = param_find("MNT_YAW_FF");
 }
 
 //OutputBase::~OutputBase()
@@ -98,13 +99,10 @@ int OutputBase::_set_angle_setpoints(const ControlData &control_data)
 	return PX4_OK;
 }
 
-#define ANG_ACC_0 (matrix::Vector3f(0.0f, 0.0f, 0.0f))
-#define ANG_ACC_1 (matrix::Vector3f(1.0f, 1.0f, 1.0f))
-
 void _print_euler(const matrix::Eulerf &euler, const char *prefix = "")
 {
 	PX4_INFO_RAW(
-		"  %18s: %8.4f, %8.4f, %8.4f\n", prefix, (double)euler(0), (double)euler(1), (double)euler(2)
+		"  %18.18s: %8.4f, %8.4f, %8.4f\n", prefix, (double)euler(0), (double)euler(1), (double)euler(2)
 	);
 }
 
@@ -113,7 +111,42 @@ void _print_euler(const float euler[3], const char *prefix = "")
 	_print_euler(matrix::Eulerf{euler[0], euler[1], euler[2]}, prefix);
 }
 
-int OutputBase::_calculate_angle_output(const hrt_abstime &t_usec)
+void OutputBase::_update_rate_controller(void)
+{
+	static matrix::Vector3f gains_p{0}, gains_i{0}, gains_d{0}, int_lim{0}, gains_ff{0};
+
+	/* PID Gains */
+	param_get(_param_pid_roll_p, &gains_p(0));
+	param_get(_param_pid_roll_i, &gains_i(0));
+	param_get(_param_pid_roll_d, &gains_d(0));
+
+	param_get(_param_pid_pitch_p, &gains_p(1));
+	param_get(_param_pid_pitch_i, &gains_i(1));
+	param_get(_param_pid_pitch_d, &gains_d(1));
+
+	param_get(_param_pid_yaw_p, &gains_p(2));
+	param_get(_param_pid_yaw_i, &gains_i(2));
+	param_get(_param_pid_yaw_d, &gains_d(2));
+
+	_rate_controller->setPidGains(gains_p, gains_i, gains_d);
+
+	/* Integral Limits */
+	param_get(_param_pid_roll_imax, &int_lim(0));
+	param_get(_param_pid_pitch_imax, &int_lim(1));
+	param_get(_param_pid_yaw_imax, &int_lim(2));
+
+	_rate_controller->setIntegratorLimit(int_lim);
+
+	/* Feed Forward Gains */
+	param_get(_param_pid_roll_ff, &gains_ff(0));
+	param_get(_param_pid_pitch_ff, &gains_ff(1));
+	param_get(_param_pid_yaw_ff, &gains_ff(2));
+
+	_rate_controller->setFeedForwardGain(gains_ff);
+
+}
+
+int OutputBase::_calculate_angle_output(const hrt_abstime &t_usec, bool new_params)
 {
 	// Check if the vehicle is currently landed
 	//if (_vehicle_land_detected_sub.updated()) {
@@ -176,10 +209,10 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t_usec)
 	matrix::Eulerf euler_vehicle{matrix::Quatf(vehicle_attitude.q)};
 
 	// Convert the vehicle angular velocity to euler angles
-	matrix::Eulerf euler_angular_velocity{
-		vehicle_angular_velocity.xyz[0],
-		vehicle_angular_velocity.xyz[1],
-		vehicle_angular_velocity.xyz[2]
+	matrix::Eulerf euler_angular_accel{
+		vehicle_angular_velocity.xyz_derivative[0],
+		vehicle_angular_velocity.xyz_derivative[1],
+		vehicle_angular_velocity.xyz_derivative[2]
 	};
 
 	// Get the zero offsets for the motors
@@ -189,6 +222,7 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t_usec)
 		_parameters.mnt_motor_yaw
 	};
 
+	// TODO: Constrain the output to the given range params
 	// Get the current angle offsets and ranges
 	//const matrix::Eulerf ranges_rad = {
 	//	math::radians(_parameters.mnt_range_roll),
@@ -196,75 +230,35 @@ int OutputBase::_calculate_angle_output(const hrt_abstime &t_usec)
 	//	math::radians(_parameters.mnt_range_yaw)
 	//};
 
-	/* RateController */
-	// Set the PID gains
-	_rate_controller->setPidGains( // Roll, Pitch, Yaw
-		matrix::Vector3f(_parameters.mnt_roll_p, _parameters.mnt_pitch_p, _parameters.mnt_yaw_p), // P Gain
-		matrix::Vector3f(_parameters.mnt_roll_i, _parameters.mnt_pitch_i, _parameters.mnt_yaw_i), // I Gain
-		matrix::Vector3f(_parameters.mnt_roll_d, _parameters.mnt_pitch_d, _parameters.mnt_yaw_d)  // D Gain
-	);
+	// Update the rate controller when necessary
+	if (new_params) {
+		_update_rate_controller();
+		PX4_INFO("Rate controller updated");
+	}
 
-	// Pass the euler angles to the rate controller (returns the gimbal rates in radians)
-	matrix::Eulerf updated_rate = _rate_controller->update(
-					      euler_vehicle, _euler_setpoint, euler_angular_velocity,
-					      dt_usec, _is_landed) * M_1_PI_F;
+	// Run the rate controller
+	matrix::Eulerf updated_rate = _rate_controller->update(euler_vehicle - zero_offsets, _euler_setpoint,
+				      euler_angular_accel, dt_usec, _is_landed) * M_2_PI_F;
 
-	// Calculate the PID output
-	//float pid[3] = {0.0f, 0.0f, 0.0f};
-
-	// Wrap the output and normalize it
 	for (i = 0; i < 3; ++i) {
 
-		// Start with the setpoint
-		_gimbal_output_rad[i] = _euler_setpoint(i);
-		//_gimbal_output_rad[i] = euler_vehicle(i);
-
-		// Add the rate output
-		_gimbal_output_rad[i] += (float)((double)dt_usec / USEC_PER_SEC) * euler_angular_velocity(i);
-		//pid[i] = _pid_calculate(_pid_controller, _euler_setpoint(i), euler_vehicle(i), dt_usec);
-		//_gimbal_output_rad[i] += pid[i];
-		//_gimbal_output_rad[i] += updated_rate(i);
-
-		// Account for the vehicle attitude
-		_gimbal_output_rad[i] -= euler_vehicle(i);
-
-		// Account for the motor zero poiont offset
-		//_gimbal_output_rad[i] -= zero_offsets(i);
-
 		// Make sure the output is within the range [-pi, pi]
-		_gimbal_output_rad[i] = matrix::wrap_pi(_gimbal_output_rad[i]);
-
-		// Constrain the output to the (optionally) given range
-		//_gimbal_output_rad[i] = math::constrain(_gimbal_output_rad[i], -ranges_rad(i), ranges_rad(i));
+		_gimbal_output_rad[i] = matrix::wrap_pi(updated_rate(i) * _parameters.og_debug3);
 
 		// Normalize the output to [-1, 1]
 		_gimbal_output_norm[i] = _gimbal_output_rad[i] / M_PI_F;
 	}
 
-	static uint32_t counter = 0;
+	//static uint32_t counter = 0;
 
-	if (_parameters.og_debug > 0 && counter++ % _parameters.og_debug == 0) {
-
-		PX4_INFO("Gimbal outputs:");
-		_print_euler(euler_vehicle, "euler_vehicle");
-		_print_euler(euler_angular_velocity, "euler_angular_velocity");
-		_print_euler(_euler_setpoint, "euler_setpoint");
-		_print_euler(updated_rate, "updated_rate");
-		//_print_euler(pid, "pid");
-		_print_euler(_gimbal_output_rad, "gimbal_output_rad");
-		_print_euler(_gimbal_output_norm, "gimbal_output_norm");
-		PX4_INFO_RAW("  %18s: %8.4f (usec)\n\n", "dt_usec", (double)dt_usec);
-	}
-
-	// Roll and pitch can only move +/- 90 degrees from the zero setpoint
-	//_gimbal_output_norm[_INDEX_ROLL] = math::constrain(updated_rate(_INDEX_ROLL), -0.5f, 0.5f);
-	//_gimbal_output_norm[_INDEX_PITCH] = math::constrain(updated_rate(_INDEX_PITCH), -0.5f, 0.5f);
-
-	//_gimbal_output_norm[_INDEX_ROLL] = updated_rate(_INDEX_ROLL);
-	//_gimbal_output_norm[_INDEX_PITCH] = updated_rate(_INDEX_PITCH);
-
-	//// Yaw can move infinitely (+/- 180 degrees)
-	//_gimbal_output_norm[_INDEX_YAW] = updated_rate(_INDEX_YAW);
+	//if (_parameters.og_debug1 > 0 && (counter++ % (uint32_t)(_parameters.og_debug1 * 100)) == 0) {
+	//	PX4_INFO("Gimbal outputs:");
+	//	_print_euler(euler_vehicle, "euler_vehicle");
+	//	_print_euler(euler_angular_accel, "euler_angular_accel");
+	//	_print_euler(updated_rate, "updated_rate");
+	//	_print_euler(_gimbal_output_rad, "gimbal_output_rad");
+	//	PX4_INFO_RAW("  %18s: %8.4f (usec)\n\n", "dt_usec", (double)dt_usec);
+	//}
 
 	// constrain pitch to [MNT_LND_P_MIN, MNT_LND_P_MAX] if landed
 	//if (_landed) {

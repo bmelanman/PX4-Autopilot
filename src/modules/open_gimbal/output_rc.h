@@ -48,7 +48,7 @@ public:
 	explicit OutputRC(const Parameters &parameters);
 	virtual ~OutputRC() = default;
 
-	virtual int update(const ControlData &control_data, bool new_setpoints);
+	virtual int update(const ControlData &control_data, bool new_setpoints, bool new_params) override;
 	virtual void print_status() const;
 
 private:

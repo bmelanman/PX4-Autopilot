@@ -171,36 +171,54 @@ param set-default MNT_RANGE_ROLL    0
 param set-default MNT_RANGE_YAW     0
 
 # Roll PID Gains
-param set-default MNT_ROLL_P  0.1
-param set-default MNT_ROLL_I 10.0
-param set-default MNT_ROLL_D  0.0
+param set-default MNT_ROLL_P     0.05
+param set-default MNT_ROLL_I     0.10
+param set-default MNT_ROLL_D     0.00
+param set-default MNT_ROLL_IMAX  0.20
+param set-default MNT_ROLL_FF    0.50
 
 # Pitch PID Gains
-param set-default MNT_PITCH_P  0.1
-param set-default MNT_PITCH_I 10.0
-param set-default MNT_PITCH_D  0.0
+param set-default MNT_PITCH_P    0.12
+param set-default MNT_PITCH_I    0.20
+param set-default MNT_PITCH_D    0.00
+param set-default MNT_PITCH_IMAX 0.40
+param set-default MNT_PITCH_FF   0.50
 
 # Yaw PID Gains
-param set-default MNT_YAW_P  0.1
-param set-default MNT_YAW_I 10.0
-param set-default MNT_YAW_D  0.0
+param set-default MNT_YAW_P      0.05
+param set-default MNT_YAW_I      0.10
+param set-default MNT_YAW_D      0.00
+param set-default MNT_YAW_IMAX   0.20
+param set-default MNT_YAW_FF     0.30
 
-# Manually setting the motor zero offsets for easier debugging
+## Manually setting the motor zero offsets for easier debugging
 param set-default MNT_MOTOR_ROLL  0
 param set-default MNT_MOTOR_PITCH 0
 param set-default MNT_MOTOR_YAW   0
 
-param set OG_DEBUG 128
+param set MNT_MOTOR_ROLL -60.0
+
+param set OG_DEBUG1 0
+param set OG_DEBUG2 0
+param set OG_DEBUG3 2
 
 # Start Open-Gimbal
 open_gimbal start
 
-#param set MNT_ROLL_P   10
-#param set MNT_PITCH_P  10
-#param set MNT_YAW_P    10
-#param set MNT_ROLL_I   1.0
-#param set MNT_PITCH_I  1.0
-#param set MNT_YAW_I    1.0
-#param set MNT_PITCH_D  0.5
-#param set MNT_ROLL_D   0.5
-#param set MNT_YAW_D    0.5
+param set MNT_ROLL_P     0.05
+param set MNT_ROLL_I     0.10
+param set MNT_ROLL_D     0.00
+param set MNT_ROLL_IMAX  0.20
+param set MNT_ROLL_FF    0.50
+
+param set MNT_PITCH_P    0.12
+param set MNT_PITCH_I    0.15
+param set MNT_PITCH_D    0.00
+param set MNT_PITCH_IMAX 0.40
+param set MNT_PITCH_FF   0.50
+
+param set MNT_YAW_P      0.05
+param set MNT_YAW_I      0.10
+param set MNT_YAW_D      0.00
+param set MNT_YAW_IMAX   0.20
+param set MNT_YAW_FF     0.30

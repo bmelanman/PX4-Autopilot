@@ -39,7 +39,6 @@
 #include <drivers/drv_hrt.h>
 #include <lib/geo/geo.h>
 #include <lib/rate_control/rate_control.hpp>
-#include <lib/pid/pid.h>
 
 #include <math.h>
 #include <mathlib/mathlib.h>
@@ -64,7 +63,7 @@ public:
 	explicit OutputBase(const Parameters &parameters);
 	virtual ~OutputBase() = default;
 
-	virtual int update(const ControlData &control_data, bool new_setpoints) = 0;
+	virtual int update(const ControlData &control_data, bool new_setpoints, bool new_params) = 0;
 
 	virtual void print_status() const = 0;
 
@@ -76,33 +75,32 @@ public:
 	static constexpr uint8_t _INDEX_PITCH = gimbal_controls_s::INDEX_PITCH;
 	static constexpr uint8_t _INDEX_YAW = gimbal_controls_s::INDEX_YAW;
 
-	float _gimbal_output_rad[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [deg]
-protected:
-	MapProjection _projection_reference{}; ///< class to convert (lon, lat) to local [m]
+	float _gimbal_output_rad[3] = { 0.f, 0.f, 0.f }; ///< output for debugging [rad]
+	//float _last_gimbal_output_rad[3] = { 0.f, 0.f, 0.f }; ///< output of the previous calculation [-1, 1]
 
+protected:
 	const Parameters &_parameters;
 
 	/** set angle setpoints, speeds & stabilize flags */
 	int _set_angle_setpoints(const ControlData &control_data);
 
-	matrix::Eulerf _euler_setpoint{NAN, NAN, NAN};   ///< can be NAN if not specifically set
+	/** calculate the angle output */
+	int _calculate_angle_output(const hrt_abstime &t, bool new_params);
+
+	hrt_abstime _last_update_usec = 0; ///< last update time
+
+	matrix::Eulerf _euler_setpoint{0, 0, 0}; ///< setpoint angles [rad]
+	float _gimbal_output_norm[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles [-1, 1]
 
 	RateControl *_rate_controller = nullptr; ///< rate controller for the gimbal
 
-	bool _stabilize[3] = { false, false, false };
+	/*** Old Stuff - Probably going to remove these in the future ***/
 
 	// Pitch and role are by default aligned with the horizon.
 	// Yaw follows the vehicle (not lock/absolute mode).
 	bool _absolute_angle[3] = {true, true, false };
-
-	/** calculate the _gimbal_output_rad (with speed) and stabilize if needed */
-	int _calculate_angle_output(const hrt_abstime &t);
-
-	float _gimbal_output_norm[3] = { 0.f, 0.f, 0.f }; ///< calculated output angles (roll, pitch, yaw) [-1, 1]
-
-	hrt_abstime _last_update_usec = 0; ///< last update time
-
-	PID_t *_pid_controller = nullptr; ///< PID controller
+	bool _stabilize[3] = { false, false, false };
+	MapProjection _projection_reference{}; ///< class to convert (lon, lat) to local [m]
 
 private:
 	uORB::Subscription _vehicle_attitude_sub{ORB_ID(vehicle_attitude)};
@@ -111,7 +109,18 @@ private:
 	uORB::Subscription _vehicle_global_position_sub{ORB_ID(vehicle_global_position)};
 	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
 
-	uORB::Publication<mount_orientation_s> _mount_orientation_pub{ORB_ID(mount_orientation)};
+	// Update rate controller gains
+	void _update_rate_controller(void);
+
+	/* PID parameters */
+	param_t _param_pid_roll_p, _param_pid_roll_i, _param_pid_roll_d;		// Roll PID
+	param_t _param_pid_pitch_p, _param_pid_pitch_i, _param_pid_pitch_d;		// Pitch PID
+	param_t _param_pid_yaw_p, _param_pid_yaw_i, _param_pid_yaw_d;			// Yaw PID
+
+	param_t _param_pid_roll_imax, _param_pid_pitch_imax, _param_pid_yaw_imax;	// PID integrator max
+	param_t _param_pid_roll_ff, _param_pid_pitch_ff, _param_pid_yaw_ff;		// PID feed forward
+
+	//uORB::Publication<mount_orientation_s> _mount_orientation_pub{ORB_ID(mount_orientation)};
 
 	bool _landed{true};
 };

@@ -48,7 +48,7 @@ OutputRC::OutputRC(const Parameters &parameters)
 {
 }
 
-int OutputRC::update(const ControlData &control_data, bool new_setpoints)
+int OutputRC::update(const ControlData &control_data, bool new_setpoints, bool new_params)
 {
 	// Update if we have new setpoints
 	if (new_setpoints && _set_angle_setpoints(control_data) != PX4_OK) {
@@ -58,7 +58,7 @@ int OutputRC::update(const ControlData &control_data, bool new_setpoints)
 	hrt_abstime t = hrt_absolute_time();
 
 	// Calculate the angle outputs
-	if (_calculate_angle_output(t) == PX4_ERROR) {
+	if (_calculate_angle_output(t, new_params) == PX4_ERROR) {
 		return PX4_ERROR;
 	}
 
