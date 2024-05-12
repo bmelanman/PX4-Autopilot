@@ -133,7 +133,7 @@
 	},
 	"ros.distro": "noetic",
 	"[c]": {
-		"editor.defaultFormatter": "ms-vscode.cpptools"
+		"editor.defaultFormatter": "xaver.clang-format"
 	},
-	"C_Cpp.errorSquiggles": "enabled",
+	"C_Cpp.errorSquiggles": "disabled",
 }
