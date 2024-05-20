@@ -654,6 +654,7 @@ int open_gimbal_main( int argc, char *argv[] )
     {
         PX4_ERR( "missing command" );
         usage();
+        status();
         return PX4_ERROR;
     }
     else if ( !strcmp( argv[1], "start" ) )
