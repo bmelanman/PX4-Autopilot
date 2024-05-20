@@ -1,46 +1,11 @@
 #!/bin/bash
 
-# Get the current time
-TIME_START=$(date +%s)
-
-# Colors
-RED="\x1b[31m"
-GREEN="\x1b[32m"
-BLUE="\x1b[34m"
-RESET="\x1b[0m"
-
-# DEFAULT_TARGET="ark_cannode_bootloader"
-DEFAULT_TARGET="ark_cannode_default"
-
-# Check for input arguments
-if [ $# -lt 1 ]; then
-	# No arguments provided, use the default target
-	MAKE_TARGET=${DEFAULT_TARGET}
-else
-	# Use the first argument as the target and remove it from the list
-	MAKE_TARGET=$1
-	shift
-fi
-
-BIN_DIR="./build/${MAKE_TARGET}"
-BIN_FILE="${BIN_DIR}/83*.uavcan.bin"
-OLD_BINS="${BIN_DIR}/old_bins"
-
-# Move any old binary files
-mkdir -p ${OLD_BINS}
-mv ${BIN_FILE} ${OLD_BINS}
-
-LOG_DIR="./build_logs"
-LOG_FILE="${LOG_DIR}/${MAKE_TARGET}-$(date +%Y%m%d-%H%M%S).log"
-
-SD_CARD_DIR="/Volumes/PIXHAWK"
-
 function print_info {
-	printf "\n${BLUE}Info:${RESET} $1\n\n"
+	printf "\n${BLUE}Info:${RESET} $@\n\n"
 }
 
 function print_error {
-	printf "\n${RED}Error:${RESET} $1\n\n"
+	printf "\n${RED}Error:${RESET} $@\n\n"
 	exit 1
 }
 
@@ -67,6 +32,60 @@ function do_task {
 	# Print the task footer
 	echo "#======================================#" | tee -a ${LOG_FILE}
 }
+
+# Colors
+RED="\x1b[31m"
+GREEN="\x1b[32m"
+BLUE="\x1b[34m"
+RESET="\x1b[0m"
+
+SD_CARD_DIR="/Volumes/PIXHAWK"
+LOG_DIR="./build_logs"
+
+ARK_BOOTLOADER="ark_cannode_canbootloader"
+ADDR_BOOTLOADER="0x08000000"
+
+ARK_DEFAULT="ark_cannode_default"
+ADDR_APPLICATION="0x08010000"
+
+MAKE_TARGET=${ARK_DEFAULT}
+#MAKE_TARGET=${ARK_BOOTLOADER}
+FLASH_ADDR=${ADDR_APPLICATION}
+
+
+# Get the current time
+TIME_START=$(date +%s)
+
+# Check for input arguments
+if [ $# -ge 1 ]; then
+	# Use the first argument as the target and remove it from the list
+	MAKE_TARGET=$1
+	shift
+fi
+
+BIN_DIR="./build/${MAKE_TARGET}"
+OLD_BINS="./old_bins/${MAKE_TARGET}"
+
+LOG_FILE="${LOG_DIR}/${MAKE_TARGET}-$(date +%Y%m%d-%H%M%S).log"
+
+# Set the flash address based on the selected target
+if [ "${MAKE_TARGET}" == "${ARK_BOOTLOADER}" ]; then
+	FLASH_ADDR=${ADDR_BOOTLOADER}
+	BIN_FILE="${BIN_DIR}/${MAKE_TARGET}.bin"
+
+elif [ "${MAKE_TARGET}" == "${ARK_DEFAULT}" ]; then
+	FLASH_ADDR=${ADDR_APPLICATION}
+	BIN_FILE="${BIN_DIR}/83*.uavcan.bin"
+
+else
+	# Print an error message
+	print_error "Invalid target: ${MAKE_TARGET}"
+	exit 1
+fi
+
+# Move any old binary files
+mkdir -p ${OLD_BINS}
+mv ${BIN_FILE} ${OLD_BINS}
 
 # Create the build log directory if it doesn't exist
 if [ ! -d ${BUILD_LOG_DIR} ] && [ ! $(mkdir -p ${BUILD_LOG_DIR}) ]; then
@@ -99,7 +118,7 @@ if [ "$(st-info --descr)" ]; then
 	# Flash the binary file
 	do_task \
 		"Flashing ${BIN_FILE}..." \
-		"st-flash write ${BIN_FILE} 0x08010000" \
+		"st-flash write ${BIN_FILE} ${FLASH_ADDR}" \
 		"Failed to flash ${BIN_FILE}"
 
 	# Reset the board
@@ -121,7 +140,9 @@ elif [ -d "${SD_CARD_DIR}" ]; then
 
 else
 	# Print a warning message
-	print_info "No ST-LINK or SD card found, binary file is located at:\n\t${GREEN}$(realpath ${BIN_FILE})${RESET}"
+	print_info "No ST-LINK or SD card found! 								\n\r\
+				\t- Binary file:   ${GREEN}$(realpath ${BIN_FILE})${RESET} 	\n\r\
+				\t- Flash address: ${GREEN}${FLASH_ADDR}${RESET}			\n\r"
 fi
 
 # Get the end time
