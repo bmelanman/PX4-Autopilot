@@ -1,0 +1,3 @@
+module_name: Open-Gimbal
+parameters:
+    - group: Open-Gimbal

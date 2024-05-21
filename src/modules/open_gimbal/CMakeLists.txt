@@ -29,17 +29,20 @@
 # ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 ############################################################################
+
+set(OPEN_GIMBAL_SOURCES
+	input.cpp
+	input_can.cpp
+	input_test.cpp
+	output.cpp
+	output_rc.cpp
+	open_gimbal.cpp)
+
 px4_add_module(
-	MODULE modules__open_gimbal
-	MAIN open_gimbal
-	COMPILE_FLAGS
+	MODULE 	modules__open_gimbal
+	MAIN 	open_gimbal
 	SRCS
-		input.cpp
-		input_can.cpp
-		input_test.cpp
-		output.cpp
-		output_rc.cpp
-		open_gimbal.cpp
+		${OPEN_GIMBAL_SOURCES}
 	DEPENDS
 		geo
 		RateControl
