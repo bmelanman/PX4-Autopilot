@@ -38,57 +38,65 @@
  */
 
 #include "camera_gimbal.hpp"
+
 #include <systemlib/err.h>
+
 #include <uavcan/equipment/camera_gimbal/Mode.hpp>
 
-UavcanCameraGimbalController::UavcanCameraGimbalController(uavcan::INode &node) :
-	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::uavcan),
-	_node(node),
-	_uavcan_pub_raw_cmd(node)
+#include "open_gimbal_params.h"
+
+#define EULER2QUAT( x, y, z ) matrix::Quatf( matrix::Eulerf( x, y, z ) )
+
+UavcanCameraGimbalController::UavcanCameraGimbalController( uavcan::INode &node )
+    : ScheduledWorkItem( MODULE_NAME, px4::wq_configurations::uavcan ), _node( node ), _uavcan_pub_raw_cmd( node )
 {
-	_uavcan_pub_raw_cmd.setPriority(uavcan::TransferPriority::MiddleLower);
+    _uavcan_pub_raw_cmd.setPriority( uavcan::TransferPriority::MiddleLower );
 }
 
-UavcanCameraGimbalController::~UavcanCameraGimbalController()
-{
+UavcanCameraGimbalController::~UavcanCameraGimbalController() {}
 
+int UavcanCameraGimbalController::init()
+{
+    if ( !_gimbal_device_set_attitude_sub.registerCallback() )
+    {
+        PX4_ERR( "callback registration failed" );
+        return false;
+    }
+    else
+    {
+        PX4_INFO( "callback registered" );
+    }
+
+    return true;
 }
 
-int
-UavcanCameraGimbalController::init()
+void UavcanCameraGimbalController::Run()
 {
-	if (!_mount_orientation_sub.registerCallback()) {
-		PX4_ERR("callback registration failed");
-		return false;
-	}
+    static gimbal_device_set_attitude_s gimbal_device_set_attitude;
 
-	return true;
-}
+    static int32_t debug_lol;
+    param_get( param_find( "PWM_MAIN_FAIL8" ), &debug_lol );
 
-void
-UavcanCameraGimbalController::Run()
-{
-	static mount_orientation_s mount_orientation = { 0 };
-	static matrix::Quatf quat(0.0f, 0.0f, 0.0f, 0.0f);
+    if ( _gimbal_device_set_attitude_sub.update( &gimbal_device_set_attitude ) )
+    {
+        // Publish the angular velocity to the gimbal
+        _cmd.gimbal_id = 0;
+        _cmd.quaternion_xyzw[0] = gimbal_device_set_attitude.angular_velocity_x;
+        _cmd.quaternion_xyzw[1] = gimbal_device_set_attitude.angular_velocity_y;
+        _cmd.quaternion_xyzw[2] = gimbal_device_set_attitude.angular_velocity_z;
 
-	if (_mount_orientation_sub.update(&mount_orientation)) {
-
-		// Convert from euler angles to quaternions
-		quat = matrix::Quatf(matrix::Eulerf(
-					     mount_orientation.attitude_euler_angle[0],
-					     mount_orientation.attitude_euler_angle[1],
-					     mount_orientation.attitude_euler_angle[2]
-				     ));
-
-		// Publish the quaternion to the gimbal
-		_cmd.gimbal_id = 0;
-		_cmd.quaternion_xyzw[0] = quat(0);
-		_cmd.quaternion_xyzw[1] = quat(1);
-		_cmd.quaternion_xyzw[2] = quat(2);
-		_cmd.quaternion_xyzw[3] = quat(3);
-
-		if (_uavcan_pub_raw_cmd.broadcast(_cmd) < 0) {
-			PX4_ERR("UavcanCameraGimbalController: Error publishing uavcan::equipment::camera_gimbal::AngularCommand");
-		}
-	}
+        if ( _uavcan_pub_raw_cmd.broadcast( _cmd ) < 0 )
+        {
+            PX4_ERR( "UavcanCameraGimbalController: Error publishing uavcan::equipment::camera_gimbal::AngularCommand"
+            );
+        }
+        else if ( debug_lol == 1111 )
+        {
+            PX4_INFO(
+                "UavcanCameraGimbalController: Published uavcan::equipment::camera_gimbal::AngularCommand: %3.4f, "
+                "%3.4f, %3.4f",
+                (double)_cmd.quaternion_xyzw[0], (double)_cmd.quaternion_xyzw[1], (double)_cmd.quaternion_xyzw[2]
+            );
+        }
+    }
 }

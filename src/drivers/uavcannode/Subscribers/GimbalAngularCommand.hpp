@@ -33,68 +33,79 @@
 
 #pragma once
 
-#include "UavcanSubscriberBase.hpp"
-
-#include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
-
-#include <uORB/Publication.hpp>
 #include <uORB/topics/gimbal_manager_set_attitude.h>
 
-namespace uavcannode
-{
+#include <uORB/Publication.hpp>
+#include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
+
+#include "UavcanSubscriberBase.hpp"
+
+namespace uavcannode {
 
 class GimbalAngularCommand;
 
-typedef uavcan::MethodBinder<GimbalAngularCommand *,
-	void (GimbalAngularCommand::*)(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand>&)>
-	GimbalAngularCommandBinder;
+typedef uavcan::MethodBinder<
+    GimbalAngularCommand *, void ( GimbalAngularCommand::* )( const uavcan::ReceivedDataStructure<
+                                                              uavcan::equipment::camera_gimbal::AngularCommand> & )>
+    GimbalAngularCommandBinder;
 
-class GimbalAngularCommand :
-	public UavcanSubscriberBase,
-	private uavcan::Subscriber<uavcan::equipment::camera_gimbal::AngularCommand, GimbalAngularCommandBinder>
-{
-public:
-	GimbalAngularCommand(uavcan::INode &node) :
-		UavcanSubscriberBase(uavcan::equipment::camera_gimbal::AngularCommand::DefaultDataTypeID),
-		uavcan::Subscriber<uavcan::equipment::camera_gimbal::AngularCommand, GimbalAngularCommandBinder>(node)
-	{}
+class GimbalAngularCommand
+    : public UavcanSubscriberBase,
+      private uavcan::Subscriber<uavcan::equipment::camera_gimbal::AngularCommand, GimbalAngularCommandBinder> {
+   public:
+    GimbalAngularCommand( uavcan::INode &node )
+        : UavcanSubscriberBase( uavcan::equipment::camera_gimbal::AngularCommand::DefaultDataTypeID ),
+          uavcan::Subscriber<uavcan::equipment::camera_gimbal::AngularCommand, GimbalAngularCommandBinder>( node )
+    {
+    }
 
-	bool init()
-	{
-		if (start(GimbalAngularCommandBinder(this, &GimbalAngularCommand::callback)) < 0) {
-			PX4_ERR("uavcan::equipment::camera_gimbal::AngularCommand subscription failed");
-			return false;
-		}
+    bool init()
+    {
+        if ( start( GimbalAngularCommandBinder( this, &GimbalAngularCommand::callback ) ) < 0 )
+        {
+            PX4_ERR( "uavcan::equipment::camera_gimbal::AngularCommand subscription failed" );
+            return false;
+        }
+        else if ( _gimbal_manager_set_attitude_pub.advertise() )
+        {
+            PX4_INFO( "gimbal_manager_set_attitude publication started" );
+        }
+        else
+        {
+            PX4_ERR( "gimbal_manager_set_attitude publication failed" );
+        }
 
-		PX4_INFO("uavcan::equipment::camera_gimbal::AngularCommand subscription succeeded");
+        PX4_INFO( "uavcan::equipment::camera_gimbal::AngularCommand subscription succeeded" );
 
-		return true;
-	}
+        return true;
+    }
 
-	void PrintInfo() const override
-	{
-		printf("\t%s:%d -> %s\n",
-		       uavcan::equipment::camera_gimbal::AngularCommand::getDataTypeFullName(),
-		       uavcan::equipment::camera_gimbal::AngularCommand::DefaultDataTypeID,
-		       _gimbal_manager_set_attitude_pub.get_topic()->o_name);
-	}
+    void PrintInfo() const override
+    {
+        printf(
+            "\t%s:%d -> %s\n", uavcan::equipment::camera_gimbal::AngularCommand::getDataTypeFullName(),
+            uavcan::equipment::camera_gimbal::AngularCommand::DefaultDataTypeID,
+            _gimbal_manager_set_attitude_pub.get_topic()->o_name
+        );
+    }
 
-private:
-	uORB::Publication<gimbal_manager_set_attitude_s> _gimbal_manager_set_attitude_pub{ORB_ID(gimbal_manager_set_attitude)};
-	gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
+   private:
+    uORB::Publication<gimbal_manager_set_attitude_s> _gimbal_manager_set_attitude_pub{
+        ORB_ID( gimbal_manager_set_attitude )
+    };
+    gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
 
-	void callback(const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand> &msg)
-	{
-		gimbal_manager_set_attitude.q[0] = msg.quaternion_xyzw[0];
-		gimbal_manager_set_attitude.q[1] = msg.quaternion_xyzw[1];
-		gimbal_manager_set_attitude.q[2] = msg.quaternion_xyzw[2];
-		gimbal_manager_set_attitude.q[3] = msg.quaternion_xyzw[3];
+    void callback( const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand> &msg )
+    {
+        gimbal_manager_set_attitude.angular_velocity_x = msg.quaternion_xyzw[0];
+        gimbal_manager_set_attitude.angular_velocity_y = msg.quaternion_xyzw[1];
+        gimbal_manager_set_attitude.angular_velocity_z = msg.quaternion_xyzw[2];
 
-		if (!_gimbal_manager_set_attitude_pub.publish(gimbal_manager_set_attitude)) {
-			PX4_ERR("gimbal_manager_set_attitude publication failed");
-
-		}
-	}
+        if ( !_gimbal_manager_set_attitude_pub.publish( gimbal_manager_set_attitude ) )
+        {
+            PX4_ERR( "gimbal_manager_set_attitude publication failed" );
+        }
+    }
 };
 
-} // namespace uavcannode
+}  // namespace uavcannode

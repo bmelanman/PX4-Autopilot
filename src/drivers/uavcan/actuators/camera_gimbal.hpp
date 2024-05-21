@@ -45,7 +45,7 @@
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionCallback.hpp>
 
-#include <uORB/topics/mount_orientation.h>
+#include <uORB/topics/gimbal_device_set_attitude.h>
 #include <uORB/PublicationMulti.hpp>
 #include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
 #include <uavcan/equipment/camera_gimbal/Status.hpp>
@@ -71,7 +71,7 @@ public:
 private:
 	uavcan::equipment::camera_gimbal::AngularCommand _cmd;
 
-	uORB::SubscriptionCallbackWorkItem _mount_orientation_sub{this, ORB_ID(mount_orientation)};
+	uORB::SubscriptionCallbackWorkItem _gimbal_device_set_attitude_sub{this, ORB_ID(gimbal_device_set_attitude)};
 
 	/*
 	 * libuavcan related things
