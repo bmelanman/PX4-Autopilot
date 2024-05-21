@@ -79,10 +79,6 @@ struct Parameters
     float og_yaw_i;
     float og_yaw_d;
 
-    float og_motor_roll;
-    float og_motor_pitch;
-    float og_motor_yaw;
-
     float og_debug1;
     float og_debug2;
     float og_debug3;
@@ -128,10 +124,6 @@ struct ParameterHandles
     param_t og_yaw_p;
     param_t og_yaw_i;
     param_t og_yaw_d;
-
-    param_t og_motor_roll;
-    param_t og_motor_pitch;
-    param_t og_motor_yaw;
 
     param_t og_debug1;
     param_t og_debug2;

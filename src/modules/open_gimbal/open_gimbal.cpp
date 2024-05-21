@@ -404,7 +404,7 @@ static int open_gimbal_thread_main( int argc, char *argv[] )
 
     matrix::Eulerf zero_offsets{ 0, 0, 0 };
     param_t motor_params[3] = {
-        param_find( "OG_MOTOR_ROLL" ), param_find( "OG_MOTOR_PITCH" ), param_find( "OG_MOTOR_YAW" )
+        param_find( "OG_OFF_ROLL" ), param_find( "OG_OFF_PITCH" ), param_find( "OG_OFF_YAW" )
     };
 
     param_get( motor_params[0], &zero_offsets( 0 ) );
@@ -731,10 +731,6 @@ void update_params( ParameterHandles &param_handles, Parameters &params )
     param_get( param_handles.og_yaw_i, &params.og_yaw_i );
     param_get( param_handles.og_yaw_d, &params.og_yaw_d );
 
-    param_get( param_handles.og_motor_roll, &params.og_motor_roll );
-    param_get( param_handles.og_motor_pitch, &params.og_motor_pitch );
-    param_get( param_handles.og_motor_yaw, &params.og_motor_yaw );
-
     param_get( param_handles.og_debug1, &params.og_debug1 );
     param_get( param_handles.og_debug2, &params.og_debug2 );
     param_get( param_handles.og_debug3, &params.og_debug3 );
@@ -792,10 +788,6 @@ bool initialize_params( ParameterHandles &param_handles, Parameters &params )
     INIT_PARAM( param_handles.og_yaw_p, "OG_YAW_P", err_flag );
     INIT_PARAM( param_handles.og_yaw_i, "OG_YAW_I", err_flag );
     INIT_PARAM( param_handles.og_yaw_d, "OG_YAW_D", err_flag );
-
-    INIT_PARAM( param_handles.og_motor_roll, "OG_MOTOR_ROLL", err_flag );
-    INIT_PARAM( param_handles.og_motor_pitch, "OG_MOTOR_PITCH", err_flag );
-    INIT_PARAM( param_handles.og_motor_yaw, "OG_MOTOR_YAW", err_flag );
 
     INIT_PARAM( param_handles.og_debug1, "OG_DEBUG1", err_flag );
     INIT_PARAM( param_handles.og_debug2, "OG_DEBUG2", err_flag );

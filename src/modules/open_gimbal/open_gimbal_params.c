@@ -32,6 +32,14 @@
  ****************************************************************************/
 
 /**
+ * @file open_gimbal_params.c
+ *
+ * Parameters defined for the open_gimbal module.
+ *
+ * @author Bryce Melander, Gimbal Guys Team <brycemelander@gmail.com>
+ */
+
+/**
  * Mount input mode
  *
  * This is the protocol used between the ground station and the autopilot.
@@ -261,36 +269,210 @@ PARAM_DEFINE_FLOAT( OG_LND_P_MIN, -90.0f );
  */
 PARAM_DEFINE_FLOAT( OG_LND_P_MAX, 90.0f );
 
-// Comp ID
+/**
+ * Gimbal component ID
+ *
+ * @min 0
+ * @max 255
+ * @decimal 1
+ * @group Open-Gimbal
+ */
 PARAM_DEFINE_INT32( OG_COMP_ID, 109 );
 
-// PID parameters for Roll axis
+/**
+ * Proportional gain for Gimbal Roll axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_ROLL_P, 0.05f );
+
+/**
+ * Integral gain for Gimbal Roll axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_ROLL_I, 0.1f );
+
+/**
+ * Derivative gain for Gimbal Roll axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_ROLL_D, 0.0f );
+
+/**
+ * Max ointegral gain for Gimbal Roll axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_ROLL_IMAX, 0.2f );
+
+/**
+ * Feed-Forward gain for Gimbal Roll axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_ROLL_FF, 0.5f );
 
-// PID parameters for Pitch axis
+/**
+ * Proportional gain for Gimbal Pitch axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_PITCH_P, 0.08f );
+
+/**
+ * Integral gain for Gimbal Pitch axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_PITCH_I, 0.1f );
+
+/**
+ * Derivative gain for Gimbal Pitch axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_PITCH_D, 0.0f );
+
+/**
+ * Max integral gain for Gimbal Pitch axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_PITCH_IMAX, 0.4f );
+
+/**
+ * Feed-Forward gain for Gimbal Pitch axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_PITCH_FF, 0.5f );
 
-// PID parameters for Yaw axis
+/**
+ * Proportional gain for Gimbal Yaw axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_YAW_P, 0.05f );
+
+/**
+ * Integral gain for Gimbal Yaw axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_YAW_I, 0.1f );
+
+/**
+ * Derivative gain for Gimbal Yaw axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_YAW_D, 0.0f );
+
+/**
+ * Max integral gain for Gimbal Yaw axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_YAW_IMAX, 0.2f );
+
+/**
+ * Feed-Forward gain for Gimbal Yaw axis PID controller
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_YAW_FF, 0.3f );
 
-// Zero offsets for the gimbal
-PARAM_DEFINE_FLOAT( OG_MOTOR_ROLL, 0.0f );
-PARAM_DEFINE_FLOAT( OG_MOTOR_PITCH, 0.0f );
-PARAM_DEFINE_FLOAT( OG_MOTOR_YAW, 0.0f );
-
-// Debug paramters for whatever they may be needed for
+/**
+ * Debug param 1
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_DEBUG1, 0.0f );
+
+/**
+ * Debug param 2
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_DEBUG2, 0.0f );
+
+/**
+ * Debug param 3
+ *
+ * @group Open-Gimbal
+ * @min 0.0
+ * @max 1.0
+ * @decimal 3
+ * @increment 0.001
+ */
 PARAM_DEFINE_FLOAT( OG_DEBUG3, 0.0f );

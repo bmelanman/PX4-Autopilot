@@ -141,11 +141,11 @@ param set-default OG_YAW_IMAX   0.20
 param set-default OG_YAW_FF     0.30
 
 ## Manually setting the motor zero offsets for easier debugging
-param set-default OG_MOTOR_ROLL  0
-param set-default OG_MOTOR_PITCH 0
-param set-default OG_MOTOR_YAW   0
+param set-default OG_OFF_ROLL  0
+param set-default OG_OFF_PITCH 0
+param set-default OG_OFF_YAW   0
 
-param set OG_MOTOR_ROLL -60.0
+param set OG_OFF_ROLL -60.0
 
 param set-default OG_DEBUG1 0
 param set-default OG_DEBUG2 0

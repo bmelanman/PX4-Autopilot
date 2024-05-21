@@ -213,9 +213,7 @@ int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec, bool new_par
     };
 
     // Get the zero offsets for the motors
-    const matrix::Eulerf zero_offsets{
-        _parameters.og_motor_roll, _parameters.og_motor_pitch, _parameters.og_motor_yaw
-    };
+    const matrix::Eulerf zero_offsets{ _parameters.og_off_roll, _parameters.og_off_pitch, _parameters.og_off_yaw };
 
     // TODO: Constrain the output to the given range params
     // Get the current angle offsets and ranges

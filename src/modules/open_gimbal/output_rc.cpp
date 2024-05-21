@@ -124,7 +124,7 @@ void OutputRC::print_status() const
         PX4_INFO( "Vehicle attitude not available\n" );
     }
 
-    matrix::Eulerf motor_offsets{ _parameters.og_motor_roll, _parameters.og_motor_pitch, _parameters.og_motor_yaw };
+    matrix::Eulerf motor_offsets{ _parameters.og_off_roll, _parameters.og_off_pitch, _parameters.og_off_yaw };
 
     PX4_INFO_RAW( "\n/* Vehicle Attitude with Motor Offset *********/\n" );
     _print_euler( veh_att + motor_offsets, true );
