@@ -166,7 +166,9 @@ set(config_kernel_list)
 find_package (Python3 COMPONENTS Interpreter)
 
 # We have a custom error message to tell users how to install python3.
-if(NOT Python3_FOUND)
+if(Python3_FOUND)
+	set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
+else()
 	message(FATAL_ERROR "Python 3 not found. Please install Python 3:\n"
 		"    Ubuntu: sudo apt install python3 python3-dev python3-pip\n"
 		"    macOS: brew install python")
