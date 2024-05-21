@@ -45,7 +45,7 @@
 #include <matrix/matrix/math.hpp>
 
 // Parameters
-#include "gimbal_params.h"
+#include "open_gimbal_params.h"
 
 // Inputs
 #include "input_can.h"
@@ -139,11 +139,12 @@ static bool _update_vehicle_attitude()
     return false;
 }
 
-static void _provide_gimbal_device_information()
+static void _provide_gimbal_device_information( bool force = false )
 {
     // Check if the command is a request for gimbal device information
-    if ( vehicle_command.command == vehicle_command_s::VEHICLE_CMD_REQUEST_MESSAGE &&
-         (uint16_t)( vehicle_command.param1 ) == vehicle_command_s::VEHICLE_CMD_GIMBAL_DEVICE_INFORMATION )
+    if ( ( vehicle_command.command == vehicle_command_s::VEHICLE_CMD_REQUEST_MESSAGE &&
+           (uint16_t)( vehicle_command.param1 ) == vehicle_command_s::VEHICLE_CMD_GIMBAL_DEVICE_INFORMATION ) ||
+         force == true )
     {
         // Setup the response
         gimbal_device_information.timestamp = hrt_absolute_time();
@@ -167,17 +168,23 @@ static void _provide_gimbal_device_information()
         gimbal_device_information.custom_cap_flags = 0;
 
         // Struct's angle limits are in radians, but params are in degrees!
-        gimbal_device_information.roll_min = -( g_thread_data->thread_params.mnt_range_roll ) * M_DEG_TO_RAD_F;
-        gimbal_device_information.roll_max = ( g_thread_data->thread_params.mnt_range_roll ) * M_DEG_TO_RAD_F;
+        gimbal_device_information.roll_min = -( g_thread_data->thread_params.og_range_roll ) * M_DEG_TO_RAD_F;
+        gimbal_device_information.roll_max = ( g_thread_data->thread_params.og_range_roll ) * M_DEG_TO_RAD_F;
 
-        gimbal_device_information.pitch_min = -( g_thread_data->thread_params.mnt_range_pitch ) * M_DEG_TO_RAD_F;
-        gimbal_device_information.pitch_max = ( g_thread_data->thread_params.mnt_range_pitch ) * M_DEG_TO_RAD_F;
+        gimbal_device_information.pitch_min = -( g_thread_data->thread_params.og_range_pitch ) * M_DEG_TO_RAD_F;
+        gimbal_device_information.pitch_max = ( g_thread_data->thread_params.og_range_pitch ) * M_DEG_TO_RAD_F;
 
-        gimbal_device_information.yaw_min = -( g_thread_data->thread_params.mnt_range_yaw ) * M_DEG_TO_RAD_F;
-        gimbal_device_information.yaw_max = ( g_thread_data->thread_params.mnt_range_yaw ) * M_DEG_TO_RAD_F;
+        gimbal_device_information.yaw_min = -( g_thread_data->thread_params.og_range_yaw ) * M_DEG_TO_RAD_F;
+        gimbal_device_information.yaw_max = ( g_thread_data->thread_params.og_range_yaw ) * M_DEG_TO_RAD_F;
 
-        // TODO: What should this value be?
-        gimbal_device_information.gimbal_device_compid = 0;
+        // Set the gimbal device ID
+        gimbal_device_information.gimbal_device_compid = g_thread_data->thread_params.og_comp_id;
+
+        // Publish the information
+        _gimbal_device_information_pub.publish( gimbal_device_information );
+
+        // Done!
+        PX4_INFO( "Gimbal device information provided!" );
     }
 }
 
@@ -262,6 +269,9 @@ static int open_gimbal_thread_main( int argc, char *argv[] )
         PX4_ERR( "output memory allocation failed" );
         thread_should_exit.store( true );
     };
+
+    // Publish the gimbal device info while we wait for vehicle attitude to initialize
+    _provide_gimbal_device_information( true );
 
     // Wait up to 10 seconds for the vehicle attitude to initialize
     while ( !thread_should_exit.load() && i++ < 100 )
@@ -394,7 +404,7 @@ static int open_gimbal_thread_main( int argc, char *argv[] )
 
     matrix::Eulerf zero_offsets{ 0, 0, 0 };
     param_t motor_params[3] = {
-        param_find( "MNT_MOTOR_ROLL" ), param_find( "MNT_MOTOR_PITCH" ), param_find( "MNT_MOTOR_YAW" )
+        param_find( "OG_MOTOR_ROLL" ), param_find( "OG_MOTOR_PITCH" ), param_find( "OG_MOTOR_YAW" )
     };
 
     param_get( motor_params[0], &zero_offsets( 0 ) );
@@ -682,46 +692,48 @@ int open_gimbal_main( int argc, char *argv[] )
 
 void update_params( ParameterHandles &param_handles, Parameters &params )
 {
-    param_get( param_handles.mnt_mode_in, &params.mnt_mode_in );
-    param_get( param_handles.mnt_mode_out, &params.mnt_mode_out );
+    param_get( param_handles.og_mode_in, &params.og_mode_in );
+    param_get( param_handles.og_mode_out, &params.og_mode_out );
 
-    param_get( param_handles.mnt_man_pitch, &params.mnt_man_pitch );
-    param_get( param_handles.mnt_man_roll, &params.mnt_man_roll );
-    param_get( param_handles.mnt_man_yaw, &params.mnt_man_yaw );
+    param_get( param_handles.og_man_pitch, &params.og_man_pitch );
+    param_get( param_handles.og_man_roll, &params.og_man_roll );
+    param_get( param_handles.og_man_yaw, &params.og_man_yaw );
 
-    param_get( param_handles.mnt_do_stab, &params.mnt_do_stab );
+    param_get( param_handles.og_do_stab, &params.og_do_stab );
 
-    param_get( param_handles.mnt_range_pitch, &params.mnt_range_pitch );
-    param_get( param_handles.mnt_range_roll, &params.mnt_range_roll );
-    param_get( param_handles.mnt_range_yaw, &params.mnt_range_yaw );
+    param_get( param_handles.og_range_pitch, &params.og_range_pitch );
+    param_get( param_handles.og_range_roll, &params.og_range_roll );
+    param_get( param_handles.og_range_yaw, &params.og_range_yaw );
 
-    param_get( param_handles.mnt_off_pitch, &params.mnt_off_pitch );
-    param_get( param_handles.mnt_off_roll, &params.mnt_off_roll );
-    param_get( param_handles.mnt_off_yaw, &params.mnt_off_yaw );
+    param_get( param_handles.og_off_pitch, &params.og_off_pitch );
+    param_get( param_handles.og_off_roll, &params.og_off_roll );
+    param_get( param_handles.og_off_yaw, &params.og_off_yaw );
 
-    param_get( param_handles.mnt_rate_pitch, &params.mnt_rate_pitch );
-    param_get( param_handles.mnt_rate_yaw, &params.mnt_rate_yaw );
+    param_get( param_handles.og_rate_pitch, &params.og_rate_pitch );
+    param_get( param_handles.og_rate_yaw, &params.og_rate_yaw );
 
-    param_get( param_handles.mnt_rc_in_mode, &params.mnt_rc_in_mode );
+    param_get( param_handles.og_rc_in_mode, &params.og_rc_in_mode );
 
-    param_get( param_handles.mnt_lnd_p_min, &params.mnt_lnd_p_min );
-    param_get( param_handles.mnt_lnd_p_max, &params.mnt_lnd_p_max );
+    param_get( param_handles.og_comp_id, &params.og_comp_id );
 
-    param_get( param_handles.mnt_roll_p, &params.mnt_roll_p );
-    param_get( param_handles.mnt_roll_i, &params.mnt_roll_i );
-    param_get( param_handles.mnt_roll_d, &params.mnt_roll_d );
+    param_get( param_handles.og_lnd_p_min, &params.og_lnd_p_min );
+    param_get( param_handles.og_lnd_p_max, &params.og_lnd_p_max );
 
-    param_get( param_handles.mnt_pitch_p, &params.mnt_pitch_p );
-    param_get( param_handles.mnt_pitch_i, &params.mnt_pitch_i );
-    param_get( param_handles.mnt_pitch_d, &params.mnt_pitch_d );
+    param_get( param_handles.og_roll_p, &params.og_roll_p );
+    param_get( param_handles.og_roll_i, &params.og_roll_i );
+    param_get( param_handles.og_roll_d, &params.og_roll_d );
 
-    param_get( param_handles.mnt_yaw_p, &params.mnt_yaw_p );
-    param_get( param_handles.mnt_yaw_i, &params.mnt_yaw_i );
-    param_get( param_handles.mnt_yaw_d, &params.mnt_yaw_d );
+    param_get( param_handles.og_pitch_p, &params.og_pitch_p );
+    param_get( param_handles.og_pitch_i, &params.og_pitch_i );
+    param_get( param_handles.og_pitch_d, &params.og_pitch_d );
 
-    param_get( param_handles.mnt_motor_roll, &params.mnt_motor_roll );
-    param_get( param_handles.mnt_motor_pitch, &params.mnt_motor_pitch );
-    param_get( param_handles.mnt_motor_yaw, &params.mnt_motor_yaw );
+    param_get( param_handles.og_yaw_p, &params.og_yaw_p );
+    param_get( param_handles.og_yaw_i, &params.og_yaw_i );
+    param_get( param_handles.og_yaw_d, &params.og_yaw_d );
+
+    param_get( param_handles.og_motor_roll, &params.og_motor_roll );
+    param_get( param_handles.og_motor_pitch, &params.og_motor_pitch );
+    param_get( param_handles.og_motor_yaw, &params.og_motor_yaw );
 
     param_get( param_handles.og_debug1, &params.og_debug1 );
     param_get( param_handles.og_debug2, &params.og_debug2 );
@@ -742,46 +754,48 @@ bool initialize_params( ParameterHandles &param_handles, Parameters &params )
 {
     bool err_flag = false;
 
-    INIT_PARAM( param_handles.mnt_mode_in, "MNT_MODE_IN", err_flag );
-    INIT_PARAM( param_handles.mnt_mode_out, "MNT_MODE_OUT", err_flag );
+    INIT_PARAM( param_handles.og_mode_in, "OG_MODE_IN", err_flag );
+    INIT_PARAM( param_handles.og_mode_out, "OG_MODE_OUT", err_flag );
 
-    INIT_PARAM( param_handles.mnt_man_pitch, "MNT_MAN_PITCH", err_flag );
-    INIT_PARAM( param_handles.mnt_man_roll, "MNT_MAN_ROLL", err_flag );
-    INIT_PARAM( param_handles.mnt_man_yaw, "MNT_MAN_YAW", err_flag );
+    INIT_PARAM( param_handles.og_man_pitch, "OG_MAN_PITCH", err_flag );
+    INIT_PARAM( param_handles.og_man_roll, "OG_MAN_ROLL", err_flag );
+    INIT_PARAM( param_handles.og_man_yaw, "OG_MAN_YAW", err_flag );
 
-    INIT_PARAM( param_handles.mnt_do_stab, "MNT_DO_STAB", err_flag );
+    INIT_PARAM( param_handles.og_do_stab, "OG_DO_STAB", err_flag );
 
-    INIT_PARAM( param_handles.mnt_range_pitch, "MNT_RANGE_PITCH", err_flag );
-    INIT_PARAM( param_handles.mnt_range_roll, "MNT_RANGE_ROLL", err_flag );
-    INIT_PARAM( param_handles.mnt_range_yaw, "MNT_RANGE_YAW", err_flag );
+    INIT_PARAM( param_handles.og_range_pitch, "OG_RANGE_PITCH", err_flag );
+    INIT_PARAM( param_handles.og_range_roll, "OG_RANGE_ROLL", err_flag );
+    INIT_PARAM( param_handles.og_range_yaw, "OG_RANGE_YAW", err_flag );
 
-    INIT_PARAM( param_handles.mnt_off_pitch, "MNT_OFF_PITCH", err_flag );
-    INIT_PARAM( param_handles.mnt_off_roll, "MNT_OFF_ROLL", err_flag );
-    INIT_PARAM( param_handles.mnt_off_yaw, "MNT_OFF_YAW", err_flag );
+    INIT_PARAM( param_handles.og_off_pitch, "OG_OFF_PITCH", err_flag );
+    INIT_PARAM( param_handles.og_off_roll, "OG_OFF_ROLL", err_flag );
+    INIT_PARAM( param_handles.og_off_yaw, "OG_OFF_YAW", err_flag );
 
-    INIT_PARAM( param_handles.mnt_rate_pitch, "MNT_RATE_PITCH", err_flag );
-    INIT_PARAM( param_handles.mnt_rate_yaw, "MNT_RATE_YAW", err_flag );
+    INIT_PARAM( param_handles.og_rate_pitch, "OG_RATE_PITCH", err_flag );
+    INIT_PARAM( param_handles.og_rate_yaw, "OG_RATE_YAW", err_flag );
 
-    INIT_PARAM( param_handles.mnt_rc_in_mode, "MNT_RC_IN_MODE", err_flag );
+    INIT_PARAM( param_handles.og_rc_in_mode, "OG_RC_IN_MODE", err_flag );
 
-    INIT_PARAM( param_handles.mnt_lnd_p_min, "MNT_LND_P_MIN", err_flag );
-    INIT_PARAM( param_handles.mnt_lnd_p_max, "MNT_LND_P_MAX", err_flag );
+    INIT_PARAM( param_handles.og_comp_id, "OG_COMP_ID", err_flag );
 
-    INIT_PARAM( param_handles.mnt_roll_p, "MNT_ROLL_P", err_flag );
-    INIT_PARAM( param_handles.mnt_roll_i, "MNT_ROLL_I", err_flag );
-    INIT_PARAM( param_handles.mnt_roll_d, "MNT_ROLL_D", err_flag );
+    INIT_PARAM( param_handles.og_lnd_p_min, "OG_LND_P_MIN", err_flag );
+    INIT_PARAM( param_handles.og_lnd_p_max, "OG_LND_P_MAX", err_flag );
 
-    INIT_PARAM( param_handles.mnt_pitch_p, "MNT_PITCH_P", err_flag );
-    INIT_PARAM( param_handles.mnt_pitch_i, "MNT_PITCH_I", err_flag );
-    INIT_PARAM( param_handles.mnt_pitch_d, "MNT_PITCH_D", err_flag );
+    INIT_PARAM( param_handles.og_roll_p, "OG_ROLL_P", err_flag );
+    INIT_PARAM( param_handles.og_roll_i, "OG_ROLL_I", err_flag );
+    INIT_PARAM( param_handles.og_roll_d, "OG_ROLL_D", err_flag );
 
-    INIT_PARAM( param_handles.mnt_yaw_p, "MNT_YAW_P", err_flag );
-    INIT_PARAM( param_handles.mnt_yaw_i, "MNT_YAW_I", err_flag );
-    INIT_PARAM( param_handles.mnt_yaw_d, "MNT_YAW_D", err_flag );
+    INIT_PARAM( param_handles.og_pitch_p, "OG_PITCH_P", err_flag );
+    INIT_PARAM( param_handles.og_pitch_i, "OG_PITCH_I", err_flag );
+    INIT_PARAM( param_handles.og_pitch_d, "OG_PITCH_D", err_flag );
 
-    INIT_PARAM( param_handles.mnt_motor_roll, "MNT_MOTOR_ROLL", err_flag );
-    INIT_PARAM( param_handles.mnt_motor_pitch, "MNT_MOTOR_PITCH", err_flag );
-    INIT_PARAM( param_handles.mnt_motor_yaw, "MNT_MOTOR_YAW", err_flag );
+    INIT_PARAM( param_handles.og_yaw_p, "OG_YAW_P", err_flag );
+    INIT_PARAM( param_handles.og_yaw_i, "OG_YAW_I", err_flag );
+    INIT_PARAM( param_handles.og_yaw_d, "OG_YAW_D", err_flag );
+
+    INIT_PARAM( param_handles.og_motor_roll, "OG_MOTOR_ROLL", err_flag );
+    INIT_PARAM( param_handles.og_motor_pitch, "OG_MOTOR_PITCH", err_flag );
+    INIT_PARAM( param_handles.og_motor_yaw, "OG_MOTOR_YAW", err_flag );
 
     INIT_PARAM( param_handles.og_debug1, "OG_DEBUG1", err_flag );
     INIT_PARAM( param_handles.og_debug2, "OG_DEBUG2", err_flag );

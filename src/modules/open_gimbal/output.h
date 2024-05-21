@@ -50,7 +50,7 @@
 #include <uORB/Subscription.hpp>
 
 #include "common.h"
-#include "gimbal_params.h"
+#include "open_gimbal_params.h"
 
 namespace open_gimbal {
 

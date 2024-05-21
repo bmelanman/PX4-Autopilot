@@ -52,23 +52,23 @@ OutputBase::OutputBase( const Parameters &parameters ) : _parameters( parameters
     _rate_controller = new RateControl();
 
     // Initialize the PID params
-    _param_pid_roll_p = param_find( "MNT_ROLL_P" );
-    _param_pid_roll_i = param_find( "MNT_ROLL_I" );
-    _param_pid_roll_d = param_find( "MNT_ROLL_D" );
-    _param_pid_roll_imax = param_find( "MNT_ROLL_IMAX" );
-    _param_pid_roll_ff = param_find( "MNT_ROLL_FF" );
+    _param_pid_roll_p = param_find( "OG_ROLL_P" );
+    _param_pid_roll_i = param_find( "OG_ROLL_I" );
+    _param_pid_roll_d = param_find( "OG_ROLL_D" );
+    _param_pid_roll_imax = param_find( "OG_ROLL_IMAX" );
+    _param_pid_roll_ff = param_find( "OG_ROLL_FF" );
 
-    _param_pid_pitch_p = param_find( "MNT_PITCH_P" );
-    _param_pid_pitch_i = param_find( "MNT_PITCH_I" );
-    _param_pid_pitch_d = param_find( "MNT_PITCH_D" );
-    _param_pid_pitch_imax = param_find( "MNT_PITCH_IMAX" );
-    _param_pid_pitch_ff = param_find( "MNT_PITCH_FF" );
+    _param_pid_pitch_p = param_find( "OG_PITCH_P" );
+    _param_pid_pitch_i = param_find( "OG_PITCH_I" );
+    _param_pid_pitch_d = param_find( "OG_PITCH_D" );
+    _param_pid_pitch_imax = param_find( "OG_PITCH_IMAX" );
+    _param_pid_pitch_ff = param_find( "OG_PITCH_FF" );
 
-    _param_pid_yaw_p = param_find( "MNT_YAW_P" );
-    _param_pid_yaw_i = param_find( "MNT_YAW_I" );
-    _param_pid_yaw_d = param_find( "MNT_YAW_D" );
-    _param_pid_yaw_imax = param_find( "MNT_YAW_IMAX" );
-    _param_pid_yaw_ff = param_find( "MNT_YAW_FF" );
+    _param_pid_yaw_p = param_find( "OG_YAW_P" );
+    _param_pid_yaw_i = param_find( "OG_YAW_I" );
+    _param_pid_yaw_d = param_find( "OG_YAW_D" );
+    _param_pid_yaw_imax = param_find( "OG_YAW_IMAX" );
+    _param_pid_yaw_ff = param_find( "OG_YAW_FF" );
 }
 
 void OutputBase::publish()
@@ -214,15 +214,15 @@ int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec, bool new_par
 
     // Get the zero offsets for the motors
     const matrix::Eulerf zero_offsets{
-        _parameters.mnt_motor_roll, _parameters.mnt_motor_pitch, _parameters.mnt_motor_yaw
+        _parameters.og_motor_roll, _parameters.og_motor_pitch, _parameters.og_motor_yaw
     };
 
     // TODO: Constrain the output to the given range params
     // Get the current angle offsets and ranges
     // const matrix::Eulerf ranges_rad = {
-    //	math::radians(_parameters.mnt_range_roll),
-    //	math::radians(_parameters.mnt_range_pitch),
-    //	math::radians(_parameters.mnt_range_yaw)
+    //	math::radians(_parameters.og_range_roll),
+    //	math::radians(_parameters.og_range_pitch),
+    //	math::radians(_parameters.og_range_yaw)
     //};
 
     // Update the rate controller when necessary
@@ -258,13 +258,13 @@ int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec, bool new_par
     //	PX4_INFO_RAW("  %18s: %8.4f (usec)\n\n", "dt_usec", (double)dt_usec);
     // }
 
-    // constrain pitch to [MNT_LND_P_MIN, MNT_LND_P_MAX] if landed
+    // constrain pitch to [OG_LND_P_MIN, OG_LND_P_MAX] if landed
     // if (_landed) {
     //	if (PX4_ISFINITE(_gimbal_output_rad[1])) {
     //		_gimbal_output_rad[1] = _translate_angle2gimbal(
     //					    _gimbal_output_rad[1],
-    //					    _parameters.mnt_off_pitch,
-    //					    _parameters.mnt_range_pitch);
+    //					    _parameters.og_off_pitch,
+    //					    _parameters.og_range_pitch);
     //	}
     //}
 

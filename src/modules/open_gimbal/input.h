@@ -34,7 +34,7 @@
 #pragma once
 
 #include "common.h"
-#include "gimbal_params.h"
+#include "open_gimbal_params.h"
 #include "math.h"
 
 namespace open_gimbal {
