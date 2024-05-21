@@ -1,11 +1,11 @@
 #!/bin/bash
 
 function print_info {
-	printf "\n${BLUE}Info:${RESET} $@\n\n"
+	printf "\n${BLUE}Info:${RESET} $@\n\n" | tee -a ${LOG_FILE}
 }
 
 function print_error {
-	printf "\n${RED}Error:${RESET} $@\n\n"
+	printf "\n${RED}Error:${RESET} $@\n\n" | tee -a ${LOG_FILE}
 	exit 1
 }
 
@@ -14,16 +14,16 @@ function do_task {
 	echo "#======================================#" | tee -a ${LOG_FILE}
 
 	# Print the info message
-	print_info "$1" | tee -a ${LOG_FILE}
+	print_info "$1"
 
 	# Do the task
-	printf "${GREEN}Running \"$2\"...${RESET}\n" | tee -a ${LOG_FILE} # >/dev/null 2>&1
+	printf "${GREEN}Running \"$2\"...${RESET}\n" | tee -a ${LOG_FILE}
 	script -F -q -e -a ${LOG_FILE} $2
 
 	# Check if the task was successful
 	if [ $? -ne 0 ]; then
 		# Print the error message
-		print_error "$3" | tee -a ${LOG_FILE}
+		print_error "$3"
 		exit 1
 	else
 		echo ""
@@ -64,9 +64,10 @@ if [ $# -ge 1 ]; then
 fi
 
 BIN_DIR="./build/${MAKE_TARGET}"
-OLD_BINS="./old_bins/${MAKE_TARGET}"
+OLD_BINS="${BIN_DIR}/old_bins"
 
 LOG_FILE="${LOG_DIR}/${MAKE_TARGET}-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p ${LOG_DIR} && touch ${LOG_FILE}
 
 # Set the flash address based on the selected target
 if [ "${MAKE_TARGET}" == "${ARK_BOOTLOADER}" ]; then
@@ -84,8 +85,7 @@ else
 fi
 
 # Move any old binary files
-mkdir -p ${OLD_BINS}
-mv ${BIN_FILE} ${OLD_BINS}
+mkdir -p ${OLD_BINS} && mv ${BIN_FILE} ${OLD_BINS} >/dev/null 2>&1
 
 # Create the build log directory if it doesn't exist
 if [ ! -d ${BUILD_LOG_DIR} ] && [ ! $(mkdir -p ${BUILD_LOG_DIR}) ]; then
@@ -98,9 +98,15 @@ print_info "Making target \"${MAKE_TARGET}\" and attempting to upload to loacal 
 # Call ulimit to make sure we have enough file descriptors
 ulimit -S -n 2048
 
+# Updated parameter metadata
+do_task \
+	"Updating parameter metadata..." \
+	"make ${MAKE_TARGET} all_metadata" \
+	"Failed to update parameter metadata"
+
 # Make the target
 do_task \
-	"Building target: ${MAKE_TARGET}" \
+	"Building target: ${MAKE_TARGET}..." \
 	"make ${MAKE_TARGET}" \
 	"Failed to build target: ${MAKE_TARGET}"
 
