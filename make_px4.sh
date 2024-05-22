@@ -145,10 +145,11 @@ elif [ -d "${SD_CARD_DIR}" ]; then
 	diskutil eject ${SD_CARD_DIR}
 
 else
+	BIN_FILE_RELATIVE=$(python3 -c "import os.path; print(os.path.relpath('${BIN_FILE}', '$(pwd)'))")
 	# Print a warning message
-	print_info "No ST-LINK or SD card found! 								\n\r\
-				\t- Binary file:   ${GREEN}$(realpath ${BIN_FILE})${RESET} 	\n\r\
-				\t- Flash address: ${GREEN}${FLASH_ADDR}${RESET}			\n\r"
+	printf "\n${RED}Error:${RESET} No ST-LINK or SD card found!\n"
+	printf "${BLUE}\t- Binary file:   ${GREEN}./${BIN_FILE_RELATIVE}${RESET}\n"
+	printf "${BLUE}\t- Flash address: ${GREEN}${FLASH_ADDR}${RESET}\n\n"
 fi
 
 # Get the end time
