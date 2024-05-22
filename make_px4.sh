@@ -98,12 +98,6 @@ print_info "Making target \"${MAKE_TARGET}\" and attempting to upload to loacal 
 # Call ulimit to make sure we have enough file descriptors
 ulimit -S -n 2048
 
-# Updated parameter metadata
-do_task \
-	"Updating parameter metadata..." \
-	"make ${MAKE_TARGET} all_metadata" \
-	"Failed to update parameter metadata"
-
 # Make the target
 do_task \
 	"Building target: ${MAKE_TARGET}..." \
