@@ -39,6 +39,8 @@
  * @author Bryce Melander, Gimbal Guys Team <brycemelander@gmail.com>
  */
 
+/* clang-format off */
+
 /**
  * Mount input mode
  *
@@ -59,7 +61,7 @@
  * @reboot_required true
  */
 // TODO: Remove?
-PARAM_DEFINE_INT32( OG_MODE_IN, 0 );
+PARAM_DEFINE_INT32(OG_MODE_IN, 0);
 
 /**
  * Mount output mode
@@ -77,7 +79,7 @@ PARAM_DEFINE_INT32( OG_MODE_IN, 0 );
  * @reboot_required true
  */
 // TODO: Remove?
-PARAM_DEFINE_INT32( OG_MODE_OUT, 0 );
+PARAM_DEFINE_INT32(OG_MODE_OUT, 0);
 
 /**
  * Auxiliary channel to control roll (in AUX input or manual mode).
@@ -93,7 +95,7 @@ PARAM_DEFINE_INT32( OG_MODE_OUT, 0 );
  * @max 6
  * @group Open-Gimbal
  */
-PARAM_DEFINE_INT32( OG_MAN_ROLL, 1 );
+PARAM_DEFINE_INT32(OG_MAN_ROLL, 1);
 
 /**
  * Auxiliary channel to control pitch (in AUX input or manual mode).
@@ -109,7 +111,7 @@ PARAM_DEFINE_INT32( OG_MAN_ROLL, 1 );
  * @max 6
  * @group Open-Gimbal
  */
-PARAM_DEFINE_INT32( OG_MAN_PITCH, 2 );
+PARAM_DEFINE_INT32(OG_MAN_PITCH, 2);
 
 /**
  * Auxiliary channel to control yaw (in AUX input or manual mode).
@@ -125,7 +127,7 @@ PARAM_DEFINE_INT32( OG_MAN_PITCH, 2 );
  * @max 6
  * @group Open-Gimbal
  */
-PARAM_DEFINE_INT32( OG_MAN_YAW, 3 );
+PARAM_DEFINE_INT32(OG_MAN_YAW, 3);
 
 /**
  * Stabilize the mount
@@ -142,7 +144,7 @@ PARAM_DEFINE_INT32( OG_MAN_YAW, 3 );
  * @group Open-Gimbal
  */
 // TODO: Remove?
-PARAM_DEFINE_INT32( OG_DO_STAB, 0 );
+PARAM_DEFINE_INT32(OG_DO_STAB, 0);
 
 /**
  * Range of pitch channel output in degrees (only in AUX output mode).
@@ -153,7 +155,7 @@ PARAM_DEFINE_INT32( OG_DO_STAB, 0 );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_RANGE_PITCH, 90.0f );
+PARAM_DEFINE_FLOAT(OG_RANGE_PITCH, 90.0f);
 
 /**
  * Range of roll channel output in degrees (only in AUX output mode).
@@ -164,7 +166,7 @@ PARAM_DEFINE_FLOAT( OG_RANGE_PITCH, 90.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_RANGE_ROLL, 90.0f );
+PARAM_DEFINE_FLOAT(OG_RANGE_ROLL, 90.0f);
 
 /**
  * Range of yaw channel output in degrees (only in AUX output mode).
@@ -175,7 +177,7 @@ PARAM_DEFINE_FLOAT( OG_RANGE_ROLL, 90.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_RANGE_YAW, 360.0f );
+PARAM_DEFINE_FLOAT(OG_RANGE_YAW, 360.0f);
 
 /**
  * Offset for pitch channel output in degrees.
@@ -186,7 +188,7 @@ PARAM_DEFINE_FLOAT( OG_RANGE_YAW, 360.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_OFF_PITCH, 0.0f );
+PARAM_DEFINE_FLOAT(OG_OFF_PITCH, 0.0f);
 
 /**
  * Offset for roll channel output in degrees.
@@ -197,7 +199,7 @@ PARAM_DEFINE_FLOAT( OG_OFF_PITCH, 0.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_OFF_ROLL, 0.0f );
+PARAM_DEFINE_FLOAT(OG_OFF_ROLL, 0.0f);
 
 /**
  * Offset for yaw channel output in degrees.
@@ -208,7 +210,7 @@ PARAM_DEFINE_FLOAT( OG_OFF_ROLL, 0.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_OFF_YAW, 0.0f );
+PARAM_DEFINE_FLOAT(OG_OFF_YAW, 0.0f);
 
 /**
  * Angular pitch rate for manual input in degrees/second.
@@ -221,7 +223,7 @@ PARAM_DEFINE_FLOAT( OG_OFF_YAW, 0.0f );
  * @group Open-Gimbal
  */
 // TODO: Remove?
-PARAM_DEFINE_FLOAT( OG_RATE_PITCH, 30.0f );
+PARAM_DEFINE_FLOAT(OG_RATE_PITCH, 30.0f);
 
 /**
  * Angular yaw rate for manual input in degrees/second.
@@ -233,7 +235,7 @@ PARAM_DEFINE_FLOAT( OG_RATE_PITCH, 30.0f );
  * @unit deg/s
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_RATE_YAW, 30.0f );
+PARAM_DEFINE_FLOAT(OG_RATE_YAW, 30.0f);
 
 /**
  * Input mode for RC gimbal input
@@ -245,7 +247,7 @@ PARAM_DEFINE_FLOAT( OG_RATE_YAW, 30.0f );
  * @group Open-Gimbal
  */
 // TODO: Remove?
-PARAM_DEFINE_INT32( OG_RC_IN_MODE, 0 );
+PARAM_DEFINE_INT32(OG_RC_IN_MODE, 0);
 
 /**
  * Pitch minimum when landed
@@ -256,7 +258,7 @@ PARAM_DEFINE_INT32( OG_RC_IN_MODE, 0 );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_LND_P_MIN, -90.0f );
+PARAM_DEFINE_FLOAT(OG_LND_P_MIN, -90.0f);
 
 /**
  * Pitch maximum when landed
@@ -267,7 +269,7 @@ PARAM_DEFINE_FLOAT( OG_LND_P_MIN, -90.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_FLOAT( OG_LND_P_MAX, 90.0f );
+PARAM_DEFINE_FLOAT(OG_LND_P_MAX, 90.0f);
 
 /**
  * Gimbal component ID
@@ -277,7 +279,7 @@ PARAM_DEFINE_FLOAT( OG_LND_P_MAX, 90.0f );
  * @decimal 1
  * @group Open-Gimbal
  */
-PARAM_DEFINE_INT32( OG_COMP_ID, 109 );
+PARAM_DEFINE_INT32(OG_COMP_ID, 109);
 
 /**
  * Proportional gain for Gimbal Roll axis PID controller
@@ -288,7 +290,7 @@ PARAM_DEFINE_INT32( OG_COMP_ID, 109 );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_ROLL_P, 0.05f );
+PARAM_DEFINE_FLOAT(OG_ROLL_P, 0.05f);
 
 /**
  * Integral gain for Gimbal Roll axis PID controller
@@ -299,7 +301,7 @@ PARAM_DEFINE_FLOAT( OG_ROLL_P, 0.05f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_ROLL_I, 0.1f );
+PARAM_DEFINE_FLOAT(OG_ROLL_I, 0.1f);
 
 /**
  * Derivative gain for Gimbal Roll axis PID controller
@@ -310,7 +312,7 @@ PARAM_DEFINE_FLOAT( OG_ROLL_I, 0.1f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_ROLL_D, 0.0f );
+PARAM_DEFINE_FLOAT(OG_ROLL_D, 0.0f);
 
 /**
  * Max ointegral gain for Gimbal Roll axis PID controller
@@ -321,7 +323,7 @@ PARAM_DEFINE_FLOAT( OG_ROLL_D, 0.0f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_ROLL_IMAX, 0.2f );
+PARAM_DEFINE_FLOAT(OG_ROLL_IMAX, 0.2f);
 
 /**
  * Feed-Forward gain for Gimbal Roll axis PID controller
@@ -332,7 +334,7 @@ PARAM_DEFINE_FLOAT( OG_ROLL_IMAX, 0.2f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_ROLL_FF, 0.5f );
+PARAM_DEFINE_FLOAT(OG_ROLL_FF, 0.5f);
 
 /**
  * Proportional gain for Gimbal Pitch axis PID controller
@@ -343,7 +345,7 @@ PARAM_DEFINE_FLOAT( OG_ROLL_FF, 0.5f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_PITCH_P, 0.08f );
+PARAM_DEFINE_FLOAT(OG_PITCH_P, 0.08f);
 
 /**
  * Integral gain for Gimbal Pitch axis PID controller
@@ -354,7 +356,7 @@ PARAM_DEFINE_FLOAT( OG_PITCH_P, 0.08f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_PITCH_I, 0.1f );
+PARAM_DEFINE_FLOAT(OG_PITCH_I, 0.1f);
 
 /**
  * Derivative gain for Gimbal Pitch axis PID controller
@@ -365,7 +367,7 @@ PARAM_DEFINE_FLOAT( OG_PITCH_I, 0.1f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_PITCH_D, 0.0f );
+PARAM_DEFINE_FLOAT(OG_PITCH_D, 0.0f);
 
 /**
  * Max integral gain for Gimbal Pitch axis PID controller
@@ -376,7 +378,7 @@ PARAM_DEFINE_FLOAT( OG_PITCH_D, 0.0f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_PITCH_IMAX, 0.4f );
+PARAM_DEFINE_FLOAT(OG_PITCH_IMAX, 0.4f);
 
 /**
  * Feed-Forward gain for Gimbal Pitch axis PID controller
@@ -387,7 +389,7 @@ PARAM_DEFINE_FLOAT( OG_PITCH_IMAX, 0.4f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_PITCH_FF, 0.5f );
+PARAM_DEFINE_FLOAT(OG_PITCH_FF, 0.5f);
 
 /**
  * Proportional gain for Gimbal Yaw axis PID controller
@@ -398,7 +400,7 @@ PARAM_DEFINE_FLOAT( OG_PITCH_FF, 0.5f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_YAW_P, 0.05f );
+PARAM_DEFINE_FLOAT(OG_YAW_P, 0.05f);
 
 /**
  * Integral gain for Gimbal Yaw axis PID controller
@@ -409,7 +411,7 @@ PARAM_DEFINE_FLOAT( OG_YAW_P, 0.05f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_YAW_I, 0.1f );
+PARAM_DEFINE_FLOAT(OG_YAW_I, 0.1f);
 
 /**
  * Derivative gain for Gimbal Yaw axis PID controller
@@ -420,7 +422,7 @@ PARAM_DEFINE_FLOAT( OG_YAW_I, 0.1f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_YAW_D, 0.0f );
+PARAM_DEFINE_FLOAT(OG_YAW_D, 0.0f);
 
 /**
  * Max integral gain for Gimbal Yaw axis PID controller
@@ -431,7 +433,7 @@ PARAM_DEFINE_FLOAT( OG_YAW_D, 0.0f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_YAW_IMAX, 0.2f );
+PARAM_DEFINE_FLOAT(OG_YAW_IMAX, 0.2f);
 
 /**
  * Feed-Forward gain for Gimbal Yaw axis PID controller
@@ -442,7 +444,7 @@ PARAM_DEFINE_FLOAT( OG_YAW_IMAX, 0.2f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_YAW_FF, 0.3f );
+PARAM_DEFINE_FLOAT(OG_YAW_FF, 0.3f);
 
 /**
  * Debug param 1
@@ -453,7 +455,7 @@ PARAM_DEFINE_FLOAT( OG_YAW_FF, 0.3f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_DEBUG1, 0.0f );
+PARAM_DEFINE_FLOAT(OG_DEBUG1, 0.0f);
 
 /**
  * Debug param 2
@@ -464,7 +466,7 @@ PARAM_DEFINE_FLOAT( OG_DEBUG1, 0.0f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_DEBUG2, 0.0f );
+PARAM_DEFINE_FLOAT(OG_DEBUG2, 0.0f);
 
 /**
  * Debug param 3
@@ -475,4 +477,6 @@ PARAM_DEFINE_FLOAT( OG_DEBUG2, 0.0f );
  * @decimal 3
  * @increment 0.001
  */
-PARAM_DEFINE_FLOAT( OG_DEBUG3, 0.0f );
+PARAM_DEFINE_FLOAT(OG_DEBUG3, 0.0f);
+
+/* clang-format on */
