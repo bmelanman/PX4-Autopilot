@@ -70,14 +70,20 @@ struct Parameters
     float og_roll_p;
     float og_roll_i;
     float og_roll_d;
+    float og_roll_imax;
+    float og_roll_ff;
 
     float og_pitch_p;
     float og_pitch_i;
     float og_pitch_d;
+    float og_pitch_imax;
+    float og_pitch_ff;
 
     float og_yaw_p;
     float og_yaw_i;
     float og_yaw_d;
+    float og_yaw_imax;
+    float og_yaw_ff;
 
     float og_debug1;
     float og_debug2;
@@ -116,14 +122,20 @@ struct ParameterHandles
     param_t og_roll_p;
     param_t og_roll_i;
     param_t og_roll_d;
+    param_t og_roll_imax;
+    param_t og_roll_ff;
 
     param_t og_pitch_p;
     param_t og_pitch_i;
     param_t og_pitch_d;
+    param_t og_pitch_imax;
+    param_t og_pitch_ff;
 
     param_t og_yaw_p;
     param_t og_yaw_i;
     param_t og_yaw_d;
+    param_t og_yaw_imax;
+    param_t og_yaw_ff;
 
     param_t og_debug1;
     param_t og_debug2;
