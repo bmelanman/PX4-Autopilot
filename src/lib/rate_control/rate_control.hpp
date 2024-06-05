@@ -59,7 +59,7 @@ public:
 	void setPidGains(const matrix::Vector3f &P, const matrix::Vector3f &I, const matrix::Vector3f &D);
 
 	/**
-	 * Set the mximum absolute value of the integrator for all axes
+	 * Set the maximum absolute value of the integrator for all axes
 	 * @param integrator_limit limit value for all axes x, y, z
 	 */
 	void setIntegratorLimit(const matrix::Vector3f &integrator_limit) { _lim_int = integrator_limit; };
@@ -90,7 +90,9 @@ public:
 	 * Run one control loop cycle calculation
 	 * @param rate estimation of the current vehicle angular rate
 	 * @param rate_sp desired vehicle angular rate setpoint
+	 * @param angular_accel estimation of the current vehicle angular acceleration
 	 * @param dt desired vehicle angular rate setpoint
+	 * @param landed true if vehicle is landed
 	 * @return [-1,1] normalized torque vector to apply to the vehicle
 	 */
 	matrix::Vector3f update(const matrix::Vector3f &rate, const matrix::Vector3f &rate_sp,
@@ -124,16 +126,16 @@ private:
 	void updateIntegral(matrix::Vector3f &rate_error, const float dt);
 
 	// Gains
-	matrix::Vector3f _gain_p; ///< rate control proportional gain for all axes x, y, z
-	matrix::Vector3f _gain_i; ///< rate control integral gain
-	matrix::Vector3f _gain_d; ///< rate control derivative gain
-	matrix::Vector3f _lim_int; ///< integrator term maximum absolute value
-	matrix::Vector3f _gain_ff; ///< direct rate to torque feed forward gain only useful for helicopters
+	matrix::Vector3f _gain_p{ 0 };   ///< rate control proportional gain for all axes x, y, z
+	matrix::Vector3f _gain_i{ 0 };   ///< rate control integral gain
+	matrix::Vector3f _gain_d{ 0 };   ///< rate control derivative gain
+	matrix::Vector3f _lim_int{ 0 };  ///< integrator term maximum absolute value
+	matrix::Vector3f _gain_ff{ 0 };  ///< direct rate to torque feed forward gain only useful for helicopters
 
 	// States
-	matrix::Vector3f _rate_int; ///< integral term of the rate controller
+	matrix::Vector3f _rate_int{ 0 };  ///< integral term of the rate controller
 
 	// Feedback from control allocation
-	matrix::Vector<bool, 3> _control_allocator_saturation_negative;
-	matrix::Vector<bool, 3> _control_allocator_saturation_positive;
+	matrix::Vector3<bool> _control_allocator_saturation_negative{ false, false, false };
+	matrix::Vector3<bool> _control_allocator_saturation_positive{ false, false, false };
 };
