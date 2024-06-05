@@ -1,41 +1,39 @@
 #!/bin/bash
 
-function print_info {
-	printf "\n${BLUE}Info:${RESET} $@\n\n" | tee -a ${LOG_FILE}
-}
+#? Usage:
+#?    ${SCRIPT_NAME} <target> <flash_addr>
+#?
+#? Options:
+#?    <target>      The target to build and flash.
+#?    <flash_addr>  The flash address to use when flashing.
+#?
+#? Available Targets:
+#?    1. ark_cannode_canbootloader ... 0x08000000 (Default)
+#?    2. ark_cannode_default ......... 0x08010000
+#?
 
-function print_error {
-	printf "\n${RED}Error:${RESET} $@\n\n" | tee -a ${LOG_FILE}
-	exit 1
-}
+SCRIPT_NAME="$(basename ${0})"
+HEADER_LEN=20
+HELP_FILTER="^#?"
 
-function do_task {
-	# Print the task header
-	echo "#======================================#" | tee -a ${LOG_FILE}
+# Check for help
+if [ "$#" -eq 3 ] || [ [ "$#" -ge 1 ] && [ [ "$1" == "-h" ] || [ "$1" == "--help" ] ] ]; then
+	# Print the help message
+	head -${HEADER_LEN} ${SCRIPT_NAME} | grep -e "${HELP_FILTER}" | sed -e "s/${HELP_FILTER}//g" -e "s/\${SCRIPT_NAME}/${SCRIPT_NAME}/g" -e "s/^ //g"
 
-	# Print the info message
-	print_info "$1"
+	echo "---"
+	echo "Num args: ${#}"
+	echo "Args: ${@}"
+	echo "---"
+	exit 0
+fi
 
-	# Do the task
-	printf "${GREEN}Running \"$2\"...${RESET}\n" | tee -a ${LOG_FILE}
-	script -F -q -e -a ${LOG_FILE} $2
-
-	# Check if the task was successful
-	if [ $? -ne 0 ]; then
-		# Print the error message
-		print_error "$3"
-		exit 1
-	else
-		echo ""
-	fi
-
-	# Print the task footer
-	echo "#======================================#" | tee -a ${LOG_FILE}
-}
+##### Config
 
 # Colors
 RED="\x1b[31m"
 GREEN="\x1b[32m"
+YELLOW="\x1b[33m"
 BLUE="\x1b[34m"
 RESET="\x1b[0m"
 
@@ -48,40 +46,94 @@ ADDR_BOOTLOADER="0x08000000"
 ARK_DEFAULT="ark_cannode_default"
 ADDR_APPLICATION="0x08010000"
 
-MAKE_TARGET=${ARK_DEFAULT}
-#MAKE_TARGET=${ARK_BOOTLOADER}
-FLASH_ADDR=${ADDR_APPLICATION}
+MAKE_TARGET=${1:-${ARK_DEFAULT}}
+FLASH_ADDR=${2:-${ADDR_APPLICATION}}
+DO_FLASH=1
 
+##### Functions
+
+function print_with_log {
+	printf  "$1" | tee -a ${LOG_FILE}
+}
+
+function print_info {
+	print_with_log "${BLUE}Info:${RESET} $@\n"
+}
+
+function print_warning {
+	print_with_log "${YELLOW}Warning:${RESET} $@\n"
+}
+
+function print_error {
+	print_with_log "${RED}Error:${RESET} $@\n"
+	exit 1
+}
+
+# Arg 1: Task description message
+# Arg 2: Task command
+# Arg 3: Error message if `task command` fails
+function do_task {
+	# Check the number of args
+	if [ $# -ne 3 ]; then
+		print_error "do_task() requires 3 arguments but got $# instead." | tee -a ${LOG_FILE}
+		exit 1
+	fi
+
+	# Task header
+	print_with_log "\n#======================================#\n\n"
+
+	# Info message
+	print_info "$1"
+
+	# Do the task
+	print_with_log "      Running \"$2\"...\n\n" | tee -a ${LOG_FILE}
+
+	# Breakdown:
+	# -a: Append the output to `LOG_FILE`
+	# -e: Return the command's exit status
+	# -F: Immediately flush output after each write
+	# -q: Run in quiet mode, omiting the start, stop, and command status messages
+	script -F -q -e -a ${LOG_FILE} $2
+
+	# Check if the task was successful
+	if [ $? -ne 0 ]; then
+		# Print the error message
+		print_error "\n$3\n"
+		exit 1
+	fi
+
+	# Task footer
+	print_with_log "\n#======================================#\n\n"
+}
+
+##### Script Start
 
 # Get the current time
 TIME_START=$(date +%s)
 
-# Check for input arguments
-if [ $# -ge 1 ]; then
-	# Use the first argument as the target and remove it from the list
-	MAKE_TARGET=$1
-	shift
-fi
-
-BIN_DIR="./build/${MAKE_TARGET}"
-OLD_BINS="${BIN_DIR}/old_bins"
-
+# Setup the log file
 LOG_FILE="${LOG_DIR}/${MAKE_TARGET}-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p ${LOG_DIR} && touch ${LOG_FILE}
+
+print_with_log "\n#======================================#\n\n"
+
+BUILD_DIR="./build/${MAKE_TARGET}"
+OLD_BINS="${BUILD_DIR}/old_bins"
 
 # Set the flash address based on the selected target
 if [ "${MAKE_TARGET}" == "${ARK_BOOTLOADER}" ]; then
 	FLASH_ADDR=${ADDR_BOOTLOADER}
-	BIN_FILE="${BIN_DIR}/${MAKE_TARGET}.bin"
+	BIN_FILE="${BUILD_DIR}/${MAKE_TARGET}*.bin"
 
 elif [ "${MAKE_TARGET}" == "${ARK_DEFAULT}" ]; then
 	FLASH_ADDR=${ADDR_APPLICATION}
-	BIN_FILE="${BIN_DIR}/83*.uavcan.bin"
+	BIN_FILE="${BUILD_DIR}/83*.uavcan.bin"
 
 else
 	# Print an error message
-	print_error "Invalid target: ${MAKE_TARGET}"
-	exit 1
+	print_warning "Unknown target: ${MAKE_TARGET}"
+	print_warning "Build will continue, but the binary file will not be flashed :)"
+	DO_FLASH=0
 fi
 
 # Move any old binary files
@@ -112,48 +164,57 @@ if [ ! -f "${BIN_FILE}" ]; then
 	exit 1
 fi
 
-# If an ST-LINK is connected, flash the binary file, or check if we can copy it to an SD card
-if [ "$(st-info --descr)" ]; then
+# Check if we should flash the binary file or not
+if [ ${DO_FLASH} -eq 1 ]; then
 
-	# Flash the binary file
-	do_task \
-		"Flashing ${BIN_FILE}..." \
-		"st-flash write ${BIN_FILE} ${FLASH_ADDR}" \
-		"Failed to flash ${BIN_FILE}"
+	# If an ST-LINK is connected, flash the binary file, or check if we can copy it to an SD card
+	if [ "$(st-info --descr)" ]; then
 
-	# Reset the board
-	do_task \
-		"Resetting the board..." \
-		"st-flash reset" \
-		"Failed to reset the board?"
+		# Flash the binary file
+		do_task \
+			"Flashing ${BIN_FILE}..." \
+			"st-flash write ${BIN_FILE} ${FLASH_ADDR}" \
+			"Failed to flash ${BIN_FILE}"
 
-# Check if an SD card exists
-elif [ -d "${SD_CARD_DIR}" ]; then
+		# Reset the board
+		do_task \
+			"Resetting the board..." \
+			"st-flash reset" \
+			"Failed to reset the board?"
 
-	# Copy the binary file to the SD card
-	do_task \
-		"Copying ${BIN_FILE} to the SD card..." \
-		"mv ${BIN_FILE} ${SD_CARD_DIR}" \
-		"Failed to copy ${BIN_FILE} to the SD card"
+	# Check if an we can copy the binary file to an SD card
+	elif [ -d "${SD_CARD_DIR}" ]; then
 
-	diskutil eject ${SD_CARD_DIR}
+		# Copy the binary file to the SD card
+		do_task \
+			"Copying ${BIN_FILE} to the SD card..." \
+			"mv ${BIN_FILE} ${SD_CARD_DIR}" \
+			"Failed to copy ${BIN_FILE} to the SD card"
 
+		diskutil eject ${SD_CARD_DIR}
+
+	# Otherwise, print an info message
+	else
+		BIN_FILE_RELATIVE=$(python3 -c "import os.path; print(os.path.relpath('${BIN_FILE}', '$(pwd)'))")
+		# Print a warning message
+		print_warning "No ST-LINK or SD card found!"
+	fi
 else
-	BIN_FILE_RELATIVE=$(python3 -c "import os.path; print(os.path.relpath('${BIN_FILE}', '$(pwd)'))")
-	# Print a warning message
-	printf "\n${RED}Error:${RESET} No ST-LINK or SD card found!\n"
-	printf "${BLUE}\t- Binary file:   ${GREEN}./${BIN_FILE_RELATIVE}${RESET}\n"
-	printf "${BLUE}\t- Flash address: ${GREEN}${FLASH_ADDR}${RESET}\n\n"
+	# Print an info message
+	print_info "Build is complete! Binary file not flashed."
 fi
 
-# Get the end time
-TIME_END=$(date +%s)
+# Print the binary file path
+if [ -f "${BIN_FILE}" ]; then
+	print_info "Binary file:   ${GREEN}${BIN_FILE}${RESET}"
+fi
 
-# Calculate the elapsed time
-ELAPSED_TIME=$(($TIME_END - $TIME_START))
+# Print the flash address if we have one
+if [ ${DO_FLASH} -eq 1 ]; then
+	print_info "Flash address: ${GREEN}${FLASH_ADDR}${RESET}"
+fi
 
-# Print the elapsed time
-print_info "Elapsed time: Took ${ELAPSED_TIME} seconds"
+print_with_log "\n#======================================#\n\n"
 
-# Done!
-print_info "Done!"
+# Print the elapsed time, and we're done!
+print_info "Took $(($(date +%s) - $TIME_START)) seconds. Done!\n"
