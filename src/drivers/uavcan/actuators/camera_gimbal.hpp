@@ -39,43 +39,43 @@
 
 #pragma once
 
-#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+#include <perf/perf_counter.h>
+#include <uORB/topics/gimbal_device_set_attitude.h>
 
-#include <uavcan/uavcan.hpp>
+#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+#include <uORB/PublicationMulti.hpp>
 #include <uORB/Subscription.hpp>
 #include <uORB/SubscriptionCallback.hpp>
-
-#include <uORB/topics/gimbal_device_set_attitude.h>
-#include <uORB/PublicationMulti.hpp>
 #include <uavcan/equipment/camera_gimbal/AngularCommand.hpp>
 #include <uavcan/equipment/camera_gimbal/Status.hpp>
-#include <perf/perf_counter.h>
+#include <uavcan/uavcan.hpp>
 
 /**
  * @brief The UavcanCameraGimbalController class
  */
 
-class UavcanCameraGimbalController : public px4::ScheduledWorkItem
-{
-public:
-	UavcanCameraGimbalController(uavcan::INode &node);
-	~UavcanCameraGimbalController();
+class UavcanCameraGimbalController : public px4::ScheduledWorkItem {
+   public:
+    UavcanCameraGimbalController( uavcan::INode &node );
+    ~UavcanCameraGimbalController();
 
-	/*
-	* setup callback
-	*/
-	int init();
+    /*
+     * setup callback
+     */
+    int init();
 
-	void Run() override;
+    void Run() override;
 
-private:
-	uavcan::equipment::camera_gimbal::AngularCommand _cmd;
+   private:
+    // UAVCAN node object
+    uavcan::INode &_node;
 
-	uORB::SubscriptionCallbackWorkItem _gimbal_device_set_attitude_sub{this, ORB_ID(gimbal_device_set_attitude)};
+    // UAVCAN message
+    uavcan::equipment::camera_gimbal::AngularCommand _cmd;
 
-	/*
-	 * libuavcan related things
-	 */
-	uavcan::INode							&_node;
-	uavcan::Publisher<uavcan::equipment::camera_gimbal::AngularCommand>	_uavcan_pub_raw_cmd;
+    // UAVCAN Publisher
+    uavcan::Publisher<uavcan::equipment::camera_gimbal::AngularCommand> _uavcan_pub_raw_cmd;
+
+    // uORB Subscription
+    uORB::SubscriptionCallbackWorkItem _gimbal_device_set_attitude_sub{ this, ORB_ID( gimbal_device_set_attitude ) };
 };

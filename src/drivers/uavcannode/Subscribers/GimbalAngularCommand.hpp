@@ -33,6 +33,12 @@
 
 #pragma once
 
+/*
+ * Converts UAVCAN camera_gimbal::AngularCommand messages to uORB gimbal_manager_set_attitude messages.
+ *
+ * CAN -> CAN_Messsage{camera_gimbal::AngularCommand} -> uORB_Message{gimbal_manager_set_attitude} -> uORB
+ */
+
 #include <uORB/topics/gimbal_manager_set_attitude.h>
 
 #include <uORB/Publication.hpp>
@@ -66,16 +72,14 @@ class GimbalAngularCommand
             PX4_ERR( "uavcan::equipment::camera_gimbal::AngularCommand subscription failed" );
             return false;
         }
-        else if ( _gimbal_manager_set_attitude_pub.advertise() )
-        {
-            PX4_INFO( "gimbal_manager_set_attitude publication started" );
-        }
-        else
+
+        if ( _gimbal_manager_set_attitude_pub.advertise() != true )
         {
             PX4_ERR( "gimbal_manager_set_attitude publication failed" );
+            return false;
         }
 
-        PX4_INFO( "uavcan::equipment::camera_gimbal::AngularCommand subscription succeeded" );
+        PX4_INFO( "GimbalAngularCommand initialized successfully" );
 
         return true;
     }
@@ -93,13 +97,12 @@ class GimbalAngularCommand
     uORB::Publication<gimbal_manager_set_attitude_s> _gimbal_manager_set_attitude_pub{
         ORB_ID( gimbal_manager_set_attitude )
     };
-    gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
 
     void callback( const uavcan::ReceivedDataStructure<uavcan::equipment::camera_gimbal::AngularCommand> &msg )
     {
-        gimbal_manager_set_attitude.angular_velocity_x = msg.quaternion_xyzw[0];
-        gimbal_manager_set_attitude.angular_velocity_y = msg.quaternion_xyzw[1];
-        gimbal_manager_set_attitude.angular_velocity_z = msg.quaternion_xyzw[2];
+        static gimbal_manager_set_attitude_s gimbal_manager_set_attitude{};
+
+        memcpy( &gimbal_manager_set_attitude.q, &msg.quaternion_xyzw, sizeof( gimbal_manager_set_attitude.q ) );
 
         if ( !_gimbal_manager_set_attitude_pub.publish( gimbal_manager_set_attitude ) )
         {

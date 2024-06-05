@@ -35,6 +35,8 @@
  * @file camera_gimbal.cpp
  *
  * @author Matthew Province, Gimbal Guys Team <mtprovin@calpoly.edu>
+ *
+ * Converts uORB gimbal_device_set_attitude messages to UAVCAN camera_gimbal::AngularCommand messages.
  */
 
 #include "camera_gimbal.hpp"
@@ -43,29 +45,27 @@
 
 #include <uavcan/equipment/camera_gimbal/Mode.hpp>
 
-#include "open_gimbal_params.h"
-
-#define EULER2QUAT( x, y, z ) matrix::Quatf( matrix::Eulerf( x, y, z ) )
-
 UavcanCameraGimbalController::UavcanCameraGimbalController( uavcan::INode &node )
     : ScheduledWorkItem( MODULE_NAME, px4::wq_configurations::uavcan ), _node( node ), _uavcan_pub_raw_cmd( node )
 {
-    _uavcan_pub_raw_cmd.setPriority( uavcan::TransferPriority::MiddleLower );
+    _uavcan_pub_raw_cmd.setPriority( uavcan::TransferPriority::OneLowerThanHighest );
 }
 
 UavcanCameraGimbalController::~UavcanCameraGimbalController() {}
 
 int UavcanCameraGimbalController::init()
 {
+    // Register the uORB subscription
     if ( !_gimbal_device_set_attitude_sub.registerCallback() )
     {
-        PX4_ERR( "callback registration failed" );
+        PX4_ERR( "UavcanCameraGimbalController callback registration failed! :(" );
         return false;
     }
-    else
-    {
-        PX4_INFO( "callback registered" );
-    }
+
+    // One or more updates from the ORB topic should trigger the callback
+    _gimbal_device_set_attitude_sub.set_required_updates( 1 );
+
+    PX4_INFO( "UavcanCameraGimbalController initialized!" );
 
     return true;
 }
@@ -74,29 +74,24 @@ void UavcanCameraGimbalController::Run()
 {
     static gimbal_device_set_attitude_s gimbal_device_set_attitude;
 
-    static int32_t debug_lol;
-    param_get( param_find( "PWM_MAIN_FAIL8" ), &debug_lol );
-
-    if ( _gimbal_device_set_attitude_sub.update( &gimbal_device_set_attitude ) )
+    // TODO: Is this check necessary?
+    if ( !_gimbal_device_set_attitude_sub.update( &gimbal_device_set_attitude ) )
     {
-        // Publish the angular velocity to the gimbal
-        _cmd.gimbal_id = 0;
-        _cmd.quaternion_xyzw[0] = gimbal_device_set_attitude.angular_velocity_x;
-        _cmd.quaternion_xyzw[1] = gimbal_device_set_attitude.angular_velocity_y;
-        _cmd.quaternion_xyzw[2] = gimbal_device_set_attitude.angular_velocity_z;
+        PX4_ERR( "Update not available in UavcanCameraGimbalController::Run()???" );
+        return;
+    }
 
-        if ( _uavcan_pub_raw_cmd.broadcast( _cmd ) < 0 )
-        {
-            PX4_ERR( "UavcanCameraGimbalController: Error publishing uavcan::equipment::camera_gimbal::AngularCommand"
-            );
-        }
-        else if ( debug_lol == 1111 )
-        {
-            PX4_INFO(
-                "UavcanCameraGimbalController: Published uavcan::equipment::camera_gimbal::AngularCommand: %3.4f, "
-                "%3.4f, %3.4f",
-                (double)_cmd.quaternion_xyzw[0], (double)_cmd.quaternion_xyzw[1], (double)_cmd.quaternion_xyzw[2]
-            );
-        }
+    memcpy(
+        &_cmd.angular_velocity_xyz, &gimbal_device_set_attitude.angular_velocity, sizeof( _cmd.angular_velocity_xyz )
+    );
+
+    // Setup the rest of the uavcan message
+    _cmd.gimbal_id = gimbal_device_set_attitude.target_component;
+    _cmd.mode = uavcan::equipment::camera_gimbal::Mode::COMMAND_MODE_ANGULAR_VELOCITY;
+
+    // Publish the angular velocity to the gimbal
+    if ( _uavcan_pub_raw_cmd.broadcast( _cmd ) < 0 )
+    {
+        PX4_ERR( "Error publishing camera_gimbal::AngularCommand! :(" );
     }
 }
