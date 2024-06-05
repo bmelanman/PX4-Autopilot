@@ -127,7 +127,7 @@ param set-default OG_ROLL_IMAX  0.20
 param set-default OG_ROLL_FF    0.50
 
 # Pitch PID Gains
-param set-default OG_PITCH_P    0.12
+param set-default OG_PITCH_P    0.05
 param set-default OG_PITCH_I    0.20
 param set-default OG_PITCH_D    0.00
 param set-default OG_PITCH_IMAX 0.40
@@ -145,29 +145,11 @@ param set-default OG_OFF_ROLL  0
 param set-default OG_OFF_PITCH 0
 param set-default OG_OFF_YAW   0
 
-param set OG_OFF_ROLL -60.0
+param set OG_OFF_ROLL -45.0
 
-param set-default OG_DEBUG1 0
+param set-default OG_DEBUG1 20
 param set-default OG_DEBUG2 0
 param set-default OG_DEBUG3 2
 
 # Start Open-Gimbal
 open_gimbal start
-
-param set OG_ROLL_P     0.05
-param set OG_ROLL_I     0.10
-param set OG_ROLL_D     0.00
-param set OG_ROLL_IMAX  0.20
-param set OG_ROLL_FF    0.50
-
-param set OG_PITCH_P    0.12
-param set OG_PITCH_I    0.15
-param set OG_PITCH_D    0.00
-param set OG_PITCH_IMAX 0.40
-param set OG_PITCH_FF   0.50
-
-param set OG_YAW_P      0.05
-param set OG_YAW_I      0.10
-param set OG_YAW_D      0.00
-param set OG_YAW_IMAX   0.20
-param set OG_YAW_FF     0.30
