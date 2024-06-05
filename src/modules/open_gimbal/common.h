@@ -47,7 +47,7 @@ namespace open_gimbal {
  */
 struct ControlData
 {
-    matrix::Eulerf euler_angle;
+    matrix::Vector3f input_angle_rad;
 };
 
 } /* namespace open_gimbal */
