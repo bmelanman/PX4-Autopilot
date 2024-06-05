@@ -42,14 +42,15 @@ namespace open_gimbal {
 class OutputRC : public OutputBase {
    public:
     OutputRC() = delete;
-    explicit OutputRC( const Parameters &parameters );
+    explicit OutputRC( Parameters &parameters );
     virtual ~OutputRC() = default;
 
-    virtual int update( const ControlData &control_data, bool new_setpoints, bool new_params ) override;
+    virtual int update( const ControlData &control_data, bool new_setpoints ) override;
     virtual void print_status() const;
 
    private:
     void _stream_device_attitude_status();
+    int _publish_gimbal_output_rc( const hrt_abstime &t_usec );
 
     uORB::Publication<gimbal_controls_s> _gimbal_controls_pub{ ORB_ID( gimbal_controls ) };
     uORB::Publication<gimbal_device_attitude_status_s> _attitude_status_pub{ ORB_ID( gimbal_device_attitude_status ) };

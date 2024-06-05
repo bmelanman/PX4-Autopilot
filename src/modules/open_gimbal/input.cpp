@@ -37,16 +37,9 @@ namespace open_gimbal {
 
 InputBase::InputBase( Parameters &parameters ) : _parameters( parameters ) {}
 
-void InputBase::control_data_set_lon_lat(
-    ControlData &control_data, double lon, double lat, float altitude, float roll_angle, float pitch_fixed_angle
-)
+void InputBase::update_params( const Parameters &parameters )
 {
-    (void)control_data;
-    (void)lon;
-    (void)lat;
-    (void)altitude;
-    (void)roll_angle;
-    (void)pitch_fixed_angle;
+    memcpy( &_parameters, &parameters, sizeof( Parameters ) );
 }
 
 } /* namespace open_gimbal */

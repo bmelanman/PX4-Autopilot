@@ -45,16 +45,16 @@ class InputTest : public InputBase {
     explicit InputTest( Parameters &parameters );
     virtual ~InputTest() = default;
 
-    UpdateResult update( unsigned int timeout_ms, ControlData &control_data, bool already_active ) override;
+    UpdateResult update( ControlData &control_data ) override;
     int initialize() override;
-    void print_status() const override;
+    void print_status( bool is_active ) const override;
 
-    void set_test_input( int roll_deg, int pitch_deg, int yaw_deg );
+    void set_test_input( float roll_deg, float pitch_deg, float yaw_deg );
 
    private:
-    int _roll_deg{ 0 };
-    int _pitch_deg{ 0 };
-    int _yaw_deg{ 0 };
+    float _roll_deg{ 0.0f };
+    float _pitch_deg{ 0.0f };
+    float _yaw_deg{ 0.0f };
 
     px4::atomic<bool> _new_input_available{ false };
 };

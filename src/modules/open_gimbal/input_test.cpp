@@ -43,20 +43,16 @@ namespace open_gimbal {
 
 InputTest::InputTest( Parameters &parameters ) : InputBase( parameters ) {}
 
-InputTest::UpdateResult InputTest::update( unsigned int timeout_ms, ControlData &control_data, bool already_active )
+InputTest::UpdateResult InputTest::update( ControlData &control_data )
 {
     if ( !_new_input_available.load() )
     {
         return UpdateResult::NoUpdate;
     }
 
-    matrix::Eulerf euler(
-        math::radians( (float)_roll_deg ), math::radians( (float)_pitch_deg ), math::radians( (float)_yaw_deg )
-    );
-
-    control_data.euler_angle( 0 ) = euler( 0 );
-    control_data.euler_angle( 1 ) = euler( 1 );
-    control_data.euler_angle( 2 ) = euler( 2 );
+    control_data.input_angle_rad( 0 ) = math::radians( _roll_deg );
+    control_data.input_angle_rad( 1 ) = math::radians( _pitch_deg );
+    control_data.input_angle_rad( 2 ) = math::radians( _yaw_deg );
 
     _new_input_available.store( false );
 
@@ -71,15 +67,15 @@ int InputTest::initialize()
     return 0;
 }
 
-void InputTest::print_status() const
+void InputTest::print_status( bool is_active ) const
 {
-    PX4_INFO( "Input: Test" );
-    PX4_INFO_RAW( "  Roll : % 4.1d deg\n", _roll_deg );
-    PX4_INFO_RAW( "  Pitch: % 4.1d deg\n", _pitch_deg );
-    PX4_INFO_RAW( "  Yaw  : % 4.1d deg\n", _yaw_deg );
+    PX4_INFO_RAW( "Input: Test (%s)\n", is_active ? "active" : "inactive" );
+    PX4_INFO_RAW( "  Roll : % 4.1f deg\n", (double)_roll_deg );
+    PX4_INFO_RAW( "  Pitch: % 4.1f deg\n", (double)_pitch_deg );
+    PX4_INFO_RAW( "  Yaw  : % 4.1f deg\n", (double)_yaw_deg );
 }
 
-void InputTest::set_test_input( int roll_deg, int pitch_deg, int yaw_deg )
+void InputTest::set_test_input( float roll_deg, float pitch_deg, float yaw_deg )
 {
     _roll_deg = roll_deg;
     _pitch_deg = pitch_deg;

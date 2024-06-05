@@ -32,7 +32,7 @@
  ****************************************************************************/
 
 // OpenGimbal Version
-#define OG_VERSION "2.3.1"
+#define OG_VERSION "2.5.0"
 
 #include <px4_platform_common/atomic.h>
 #include <px4_platform_common/defines.h>
@@ -55,37 +55,30 @@
 #include "output_rc.h"
 
 // uORB Subscriptions and Publications
-#include <uORB/topics/gimbal_controls.h>
-#include <uORB/topics/gimbal_device_information.h>
 #include <uORB/topics/parameter_update.h>
 #include <uORB/topics/vehicle_attitude.h>
-#include <uORB/topics/vehicle_command.h>
 
 #include <uORB/Publication.hpp>
 #include <uORB/SubscriptionInterval.hpp>
 
 // Polling refresh rate in microseconds
-#define REFRESH_RATE_US ( (useconds_t)( 1e4 ) )
-
-#define M_180_DEG_F 180.0f
+#define REFRESH_RATE_US ( (useconds_t)( 1000 ) )  // 1000us = 1ms
 
 using namespace time_literals;
 using namespace open_gimbal;
 
-static px4::atomic<bool> thread_should_exit{ false };
+static px4::atomic<bool> thread_should_exit{ true };
 static px4::atomic<bool> thread_running{ false };
 
-static constexpr int input_objs_len_max = 2;
+#define MAX_NUM_INPUT_OBJS ( 2U )
 
 struct ThreadData
 {
-    bool initialized = false;
-
-    InputBase *input_objs[input_objs_len_max] = { nullptr, nullptr };
-    int input_objs_len = 0;
-    int last_input_active = -1;
-
+    unsigned int input_objs_len = 0;
+    unsigned int last_input_active = -1;
     InputTest *test_input = nullptr;
+    InputBase *input_objs[MAX_NUM_INPUT_OBJS] = { 0 };
+
     OutputBase *output_obj = nullptr;
 
     ControlData control_data{};
@@ -94,30 +87,11 @@ struct ThreadData
 
 static ThreadData *g_thread_data = nullptr;
 
-// Convert a float quat[4] to a matrix::Eulerf
-#define QUAT_TO_MATRIX_EULERF( quat ) ( matrix::Eulerf( matrix::Quatf( quat ) ) )
-
 // Subscribe to VehicleAttitude
 uORB::Subscription _vehicle_attitude_sub{ ORB_ID( vehicle_attitude ) };
-static vehicle_attitude_s g_vehicle_attitude{};
-static matrix::Eulerf g_euler_vehicle_attitude;
 
-// Subscribe to VehicleCommand
-uORB::Subscription _vehicle_command_sub{ ORB_ID( vehicle_command ) };
-vehicle_command_s vehicle_command{};
-
-// Publish to GimbalDeviceInformation
-uORB::Publication<gimbal_device_information_s> _gimbal_device_information_pub{ ORB_ID( gimbal_device_information ) };
-gimbal_device_information_s gimbal_device_information{};
-
-// Publish to GimbalControls
-static uORB::Publication<gimbal_controls_s> _gimbal_controls_pub{ ORB_ID( gimbal_controls ) };
-
-// Gimbal Metadata
-#define GIMBAL_INFO_MAX_NAME_LEN ( 32U )
-static constexpr char _gimbal_vendor_name[GIMBAL_INFO_MAX_NAME_LEN] = "ARK Electronics";
-static constexpr char _gimbal_model_name[GIMBAL_INFO_MAX_NAME_LEN] = "Open-Gimbal";
-static constexpr char _gimbal_custom_name[GIMBAL_INFO_MAX_NAME_LEN] = "";
+// Subscribe to parameter updates
+uORB::SubscriptionInterval _parameter_update_sub{ ORB_ID( parameter_update ), 1_s };
 
 static void usage();
 static void update_params( ParameterHandles &param_handles, Parameters &params );
@@ -126,248 +100,13 @@ static bool initialize_params( ParameterHandles &param_handles, Parameters &para
 static int open_gimbal_thread_main( int argc, char *argv[] );
 extern "C" __EXPORT int open_gimbal_main( int argc, char *argv[] );
 
-static bool _update_vehicle_attitude()
+static int _open_gimbal_deinit( ThreadData &thread_data )
 {
-    if ( _vehicle_attitude_sub.update( &g_vehicle_attitude ) )
-    {
-        g_euler_vehicle_attitude = QUAT_TO_MATRIX_EULERF( g_vehicle_attitude.q );
-        return true;
-    }
-
-    PX4_ERR( "Error getting vehicle attitude! :(" );
-
-    return false;
-}
-
-static void _provide_gimbal_device_information( bool force = false )
-{
-    // Check if the command is a request for gimbal device information
-    if ( ( vehicle_command.command == vehicle_command_s::VEHICLE_CMD_REQUEST_MESSAGE &&
-           (uint16_t)( vehicle_command.param1 ) == vehicle_command_s::VEHICLE_CMD_GIMBAL_DEVICE_INFORMATION ) ||
-         force == true )
-    {
-        // Setup the response
-        gimbal_device_information.timestamp = hrt_absolute_time();
-
-        // TODO: Fill in more fields, maybe via params?
-        memcpy( gimbal_device_information.vendor_name, _gimbal_vendor_name, GIMBAL_INFO_MAX_NAME_LEN );
-        memcpy( gimbal_device_information.model_name, _gimbal_model_name, GIMBAL_INFO_MAX_NAME_LEN );
-        memcpy( gimbal_device_information.custom_name, _gimbal_custom_name, GIMBAL_INFO_MAX_NAME_LEN );
-        gimbal_device_information.firmware_version = 0;
-        gimbal_device_information.hardware_version = 0;
-        gimbal_device_information.uid = 0;
-
-        // Gimbal has roll and pitch axes, as well as an infinite yaw axis
-        gimbal_device_information.cap_flags =
-            gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_HAS_ROLL_AXIS |
-            gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_HAS_PITCH_AXIS |
-            gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_HAS_YAW_AXIS |
-            gimbal_device_information_s::GIMBAL_DEVICE_CAP_FLAGS_SUPPORTS_INFINITE_YAW;
-
-        // Ignore custom capabilities (for now?)
-        gimbal_device_information.custom_cap_flags = 0;
-
-        // Struct's angle limits are in radians, but params are in degrees!
-        gimbal_device_information.roll_min = -( g_thread_data->thread_params.og_range_roll ) * M_DEG_TO_RAD_F;
-        gimbal_device_information.roll_max = ( g_thread_data->thread_params.og_range_roll ) * M_DEG_TO_RAD_F;
-
-        gimbal_device_information.pitch_min = -( g_thread_data->thread_params.og_range_pitch ) * M_DEG_TO_RAD_F;
-        gimbal_device_information.pitch_max = ( g_thread_data->thread_params.og_range_pitch ) * M_DEG_TO_RAD_F;
-
-        gimbal_device_information.yaw_min = -( g_thread_data->thread_params.og_range_yaw ) * M_DEG_TO_RAD_F;
-        gimbal_device_information.yaw_max = ( g_thread_data->thread_params.og_range_yaw ) * M_DEG_TO_RAD_F;
-
-        // Set the gimbal device ID
-        gimbal_device_information.gimbal_device_compid = g_thread_data->thread_params.og_comp_id;
-
-        // Publish the information
-        _gimbal_device_information_pub.publish( gimbal_device_information );
-
-        // Done!
-        PX4_INFO( "Gimbal device information provided!" );
-    }
-}
-
-static int open_gimbal_thread_main( int argc, char *argv[] )
-{
-    int i = 0;
-
-    // Debug: For moving the pitch axis up and down
-    hrt_abstime last_time = hrt_absolute_time();
-    int toggle = 1;
-
-    ParameterHandles param_handles;
-    ThreadData thread_data;
-
-    // Debug: For printing quaternions
-    g_thread_data = &thread_data;
-
-    // Initialize parameters
-    if ( !initialize_params( param_handles, thread_data.thread_params ) )
-    {
-        PX4_ERR( "could not get mount parameters!" );
-
-        // Clean up if we fail to initialize
-        for ( i = 0; i < thread_data.input_objs_len; ++i )
-        {
-            if ( thread_data.input_objs[i] )
-            {
-                delete ( thread_data.input_objs[i] );
-                thread_data.input_objs[i] = nullptr;
-            }
-        }
-
-        return PX4_ERROR;
-    }
-
-    // Set the thread status
-    thread_running.store( true );
-
-    // Subscribe to parameter updates
-    uORB::SubscriptionInterval parameter_update_sub{ ORB_ID( parameter_update ), 1_s };
-
-    // Initialize test input object to set the initial orientation
-    thread_data.test_input = new InputTest( thread_data.thread_params );
-
-    // Create input objects
-    thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
-    thread_data.input_objs[thread_data.input_objs_len++] = new InputCAN( thread_data.thread_params );
-
-    // Verify the input objects were created
-    for ( i = 0; i < thread_data.input_objs_len; ++i )
-    {
-        if ( !thread_data.input_objs[i] )
-        {
-            PX4_ERR( "Input %d failed to initialize! Exiting... :(", i );
-            thread_should_exit.store( true );
-
-            break;
-        }
-    }
-
-    // Initialize input objects
-    if ( !thread_should_exit.load() )
-    {
-        for ( i = 0; i < thread_data.input_objs_len; ++i )
-        {
-            if ( thread_data.input_objs[i]->initialize() != 0 )
-            {
-                PX4_ERR( "Input %d failed", i );
-                thread_should_exit.store( true );
-
-                break;
-            }
-        }
-    }
-
-    // Create the output object
-    thread_data.output_obj = new OutputRC( thread_data.thread_params );
-
-    // Verify the output object was created
-    if ( !thread_data.output_obj )
-    {
-        PX4_ERR( "output memory allocation failed" );
-        thread_should_exit.store( true );
-    };
-
-    // Publish the gimbal device info while we wait for vehicle attitude to initialize
-    _provide_gimbal_device_information( true );
-
-    // Wait up to 10 seconds for the vehicle attitude to initialize
-    while ( !thread_should_exit.load() && i++ < 100 )
-    {
-        // Check vehicle attitude
-        if ( _update_vehicle_attitude() )
-        {
-            break;
-        }
-
-        px4_usleep( 100000 );
-    }
-
-    static bool new_setpoints, new_params = true;
-    static InputBase::UpdateResult update_result;
-
-    while ( !thread_should_exit.load() )
-    {
-        // Check for parameter updates
-        if ( parameter_update_sub.updated() )
-        {
-            parameter_update_s pupdate;
-            parameter_update_sub.copy( &pupdate );
-
-            update_params( param_handles, thread_data.thread_params );
-            new_params = true;
-        }
-
-        // Check for a new vehicle command
-        if ( _vehicle_command_sub.update( &vehicle_command ) )
-        {
-            _provide_gimbal_device_information();
-        }
-
-        new_setpoints = false;
-        update_result = InputBase::UpdateResult::NoUpdate;
-
-        // Update input and output objects
-        if ( thread_data.input_objs_len > 0 )
-        {
-            // Check each input object for new setpoints
-            for ( i = 0; i < thread_data.input_objs_len; ++i )
-            {
-                const bool already_active = ( thread_data.last_input_active == i );
-                // poll only on active input to reduce latency, or on all if none is active
-                const unsigned int poll_timeout = ( already_active || thread_data.last_input_active == -1 ) ? 20 : 0;
-
-                // Update input
-                update_result =
-                    thread_data.input_objs[i]->update( poll_timeout, thread_data.control_data, already_active );
-
-                // Check if we need to switch to a different input
-                if ( update_result == InputBase::UpdateResult::NoUpdate && already_active )
-                {
-                    // No longer active.
-                    thread_data.last_input_active = -1;
-                }
-                else if ( update_result == InputBase::UpdateResult::UpdatedActive )
-                {
-                    thread_data.last_input_active = i;
-                    new_setpoints = true;
-                    break;
-
-                }  // Else ignore, input not active
-            }
-
-            // Update output
-            if ( thread_data.output_obj->update( thread_data.control_data, new_setpoints, new_params ) == PX4_ERROR )
-            {
-                PX4_ERR( "Output update failed, exiting gimbal thread..." );
-                thread_should_exit.store( true );
-            }
-
-            // Publish the mount orientation
-            thread_data.output_obj->publish();
-        }
-
-        // Reset the flags
-        new_params = false;
-
-        // Debug: Move the pitch axis up and down by 10 degrees every 5 seconds
-        if ( hrt_elapsed_time( &last_time ) > 5_s )
-        {
-            thread_data.test_input->set_test_input( 0, toggle * 10, 0 );
-            last_time = hrt_absolute_time();
-            toggle ^= 1;
-        }
-
-        // Wait for a bit before the next loop
-        px4_usleep( REFRESH_RATE_US );
-    }
-
     PX4_INFO( "Deinitializing..." );
+    unsigned int i;
 
     // Clean up input objects
-    for ( i = 0; i < input_objs_len_max; ++i )
+    for ( i = 0; i < MAX_NUM_INPUT_OBJS; ++i )
     {
         if ( thread_data.input_objs[i] )
         {
@@ -393,91 +132,176 @@ static int open_gimbal_thread_main( int argc, char *argv[] )
     return PX4_OK;
 }
 
-//////////////////////////////////////////////////////////
-// TODO: Move zero position value storage to parameters //
-//////////////////////////////////////////////////////////
-/* int init( ThreadData *thread_data )
+static int _open_gimbal_init( ParameterHandles &param_handles, ThreadData &thread_data )
 {
-    PX4_INFO( "Initializing..." );
+    // Initialize parameters
+    // TODO: This function now always returns true
+    if ( !initialize_params( param_handles, thread_data.thread_params ) )
+    {
+        PX4_ERR( "could not get mount parameters!" );
 
-    char c = 'n';
+        // Exit the thread
+        thread_should_exit.store( true );
+        return PX4_ERROR;
+    }
 
-    matrix::Eulerf zero_offsets{ 0, 0, 0 };
-    param_t motor_params[3] = {
-        param_find( "OG_OFF_ROLL" ), param_find( "OG_OFF_PITCH" ), param_find( "OG_OFF_YAW" )
+    // Set the thread status
+    thread_running.store( true );
+
+    // Initialize test input object to set the initial orientation
+    thread_data.test_input = new InputTest( thread_data.thread_params );
+
+    // Create input objects
+    thread_data.input_objs[thread_data.input_objs_len++] = thread_data.test_input;
+    thread_data.input_objs[thread_data.input_objs_len++] = new InputCAN( thread_data.thread_params );
+
+    unsigned int i;
+
+    // Verify the input objects were created
+    for ( i = 0; i < thread_data.input_objs_len; ++i )
+    {
+        if ( !thread_data.input_objs[i] )
+        {
+            PX4_ERR( "Input %d failed to initialize! Exiting... :(", i );
+            thread_should_exit.store( true );
+
+            // Deinitialize the thread and exit
+            goto init_error;
+        }
+    }
+
+    // Initialize input objects
+    for ( i = 0; i < thread_data.input_objs_len; ++i )
+    {
+        if ( thread_data.input_objs[i]->initialize() != PX4_OK )
+        {
+            PX4_ERR( "Input %d failed", i );
+            thread_should_exit.store( true );
+
+            // Deinitialize the thread and exit
+            goto init_error;
+        }
+    }
+
+    // Create the output object
+    thread_data.output_obj = new OutputRC( thread_data.thread_params );
+
+    // Verify the output object was created
+    if ( !thread_data.output_obj )
+    {
+        PX4_ERR( "output memory allocation failed" );
+        thread_should_exit.store( true );
+
+        // Deinitialize the thread and exit
+        goto init_error;
     };
 
-    param_get( motor_params[0], &zero_offsets( 0 ) );
-    param_get( motor_params[1], &zero_offsets( 1 ) );
-    param_get( motor_params[2], &zero_offsets( 2 ) );
-
-    // Check if the offset params are already non-zero (to avoid unnecessary initialization)
-    if ( !( matrix::isEqualF( ( zero_offsets.abs() ).max(), 0.0f ) ) )
+    // Wait up to 10 seconds for the vehicle attitude to initialize
+    while ( !thread_should_exit.load() && i++ < 200 )
     {
-        PX4_WARN(
-            "One or more of the motor offset parameters appear to be non-zero, "
-            "would you like to continue with initialization anyway? (y/N)      "
-        );
+        // Check vehicle attitude
+        if ( _vehicle_attitude_sub.updated() )
+        {
+            // Initialization complete!
+            PX4_INFO( "Initialization complete!" );
+            return PX4_OK;
+        }
 
-        c = getchar();
+        PX4_WARN( "Waiting for vehicle attitude to initialize..." );
+
+        px4_usleep( 100000 );
     }
 
-    if ( c == 'y' || c == 'Y' )
+    PX4_ERR( "Could not initialize vehicle attitude!" );
+
+init_error:
+
+    _open_gimbal_deinit( thread_data );
+    return PX4_ERROR;
+}
+
+static int open_gimbal_thread_main( int argc, char *argv[] )
+{
+    unsigned int i;
+
+    ParameterHandles param_handles;
+    ThreadData thread_data;
+
+    // Debug: For printing quaternions
+    g_thread_data = &thread_data;
+
+    // Initialize the gimbal
+    if ( _open_gimbal_init( param_handles, thread_data ) != PX4_OK )
     {
-        // Initialize the axis offsets
-        PX4_INFO( "The vehicle will now move to find each motor's zero position, press any key to continue..." );
-
-        // Wait for user input
-        (void)getchar();
-
-        // Publish (0, 0, 0) to the gimbal controls
-        gimbal_controls_s gimbal_controls = { 0 };
-        gimbal_controls.timestamp = hrt_absolute_time();
-        _gimbal_controls_pub.publish( gimbal_controls );
-
-        // Wait for the gimbal to stabilize
-        // TODO: Implement a loop that waits until the changes in attitude are below a certain threshold
-        px4_usleep( 1e7 );
-
-        // Get a copy of the current vehicle attitude
-        if ( _update_vehicle_attitude() )
-        {
-            // Set the zero offsets
-            zero_offsets( 0 ) = g_euler_vehicle_attitude( 0 );
-            zero_offsets( 1 ) = g_euler_vehicle_attitude( 1 );
-            zero_offsets( 2 ) = g_euler_vehicle_attitude( 2 );
-
-            g_thread_data->initialized = true;
-
-            PX4_INFO( "Zero position has been recorded!" );
-
-            // Update the parameters
-            param_set( motor_params[0], &zero_offsets( 0 ) );
-            param_set( motor_params[1], &zero_offsets( 1 ) );
-            param_set( motor_params[2], &zero_offsets( 2 ) );
-
-            PX4_INFO( "Parameters updated!" );
-        }
-        else
-        {
-            PX4_ERR( "Initialization failed!" );
-            return PX4_ERROR;
-        }
+        return PX4_ERROR;
     }
 
-    PX4_INFO( "Initialization complete!" );
+    // TODO: Add a param to update_params() to pass the param_update struct
+    static parameter_update_s param_update;
+    static InputBase::UpdateResult update_result;
+    static bool already_active;
 
-    PX4_INFO(
-        "Zero position set to:	\n"
-        "  Roll:  %8.4f		\n"
-        "  Pitch: %8.4f		\n"
-        "  Yaw:   %8.4f		\n",
-        (double)( zero_offsets( 0 ) * M_RAD_TO_DEG_F ), (double)( zero_offsets( 1 ) * M_RAD_TO_DEG_F ),
-        (double)( zero_offsets( 2 ) * M_RAD_TO_DEG_F )
-    );
+    while ( !thread_should_exit.load() )
+    {
+        // Check for parameter updates
+        // if ( _parameter_update_sub.updated() )
+        if ( _parameter_update_sub.update( &param_update ) )
+        {
+            update_params( param_handles, thread_data.thread_params );
 
-    return PX4_OK;
-} */
+            // Update the input and output objects' parameters
+            for ( i = 0; i < thread_data.input_objs_len; ++i )
+            {
+                thread_data.input_objs[i]->update_params( thread_data.thread_params );
+            }
+
+            thread_data.output_obj->update_params( thread_data.thread_params );
+        }
+
+        // Update input and output objects
+        if ( thread_data.input_objs_len > 0 )
+        {
+            // Check each input object for new setpoints
+            for ( i = 0; i < thread_data.input_objs_len; ++i )
+            {
+                already_active = ( thread_data.last_input_active == i );
+
+                // Update input
+                update_result = thread_data.input_objs[i]->update( thread_data.control_data );
+
+                // Check if the input has been updated since we last checked
+                if ( update_result == InputBase::UpdateResult::UpdatedActive )
+                {
+                    thread_data.last_input_active = i;
+
+                    break;
+                }
+
+                // Otherwise, update the last active input to `none`
+                else if ( already_active )
+                {
+                    // No longer active.
+                    thread_data.last_input_active = -1;
+                }
+            }
+
+            // Update output
+            if ( thread_data.output_obj->update( thread_data.control_data, true ) == PX4_ERROR )
+            {
+                PX4_ERR( "Output update failed, exiting gimbal thread..." );
+                thread_should_exit.store( true );
+            }
+
+            // Publish the mount orientation
+            thread_data.output_obj->publish();
+        }
+
+        // Wait for a bit before the next loop
+        px4_usleep( REFRESH_RATE_US );
+    }
+
+    return _open_gimbal_deinit( thread_data );
+}
 
 int start( void )
 {
@@ -556,35 +380,13 @@ int stop( void )
 
 int status( void )
 {
-    int i = 0;
+    unsigned int i;
 
-    if ( thread_running.load() && g_thread_data && g_thread_data->test_input )
+    if ( thread_running.load() && g_thread_data )
     {
-        if ( g_thread_data->input_objs_len == 0 )
+        for ( i = 0; i < g_thread_data->input_objs_len; ++i )
         {
-            PX4_INFO( "Input: None" );
-        }
-        else
-        {
-            PX4_INFO( "Input Selected" );
-
-            for ( i = 0; i < g_thread_data->input_objs_len; ++i )
-            {
-                if ( i == g_thread_data->last_input_active )
-                {
-                    g_thread_data->input_objs[i]->print_status();
-                }
-            }
-
-            PX4_INFO( "Input not selected" );
-
-            for ( i = 0; i < g_thread_data->input_objs_len; ++i )
-            {
-                if ( i != g_thread_data->last_input_active )
-                {
-                    g_thread_data->input_objs[i]->print_status();
-                }
-            }
+            g_thread_data->input_objs[i]->print_status( i == g_thread_data->last_input_active );
         }
 
         if ( g_thread_data->output_obj )
@@ -593,7 +395,7 @@ int status( void )
         }
         else
         {
-            PX4_INFO( "Output: None" );
+            PX4_INFO_RAW( "Output: None" );
         }
     }
     else
@@ -619,7 +421,7 @@ int test( int argc, char *argv[] )
         {
             bool found_axis = false;
             const char *axis_names[3] = { "roll", "pitch", "yaw" };
-            int angles[3] = { 0, 0, 0 };
+            float angles[3] = { 0, 0, 0 };
 
             for ( int arg_i = 2; arg_i < ( argc - 1 ); ++arg_i )
             {
@@ -627,7 +429,7 @@ int test( int argc, char *argv[] )
                 {
                     if ( !strcmp( argv[arg_i], axis_names[axis_i] ) )
                     {
-                        int angle_deg = (int)strtol( argv[arg_i + 1], nullptr, 0 );
+                        float angle_deg = (float)strtof( argv[arg_i + 1], nullptr );
                         angles[axis_i] = angle_deg;
                         found_axis = true;
                     }
@@ -658,147 +460,209 @@ int test( int argc, char *argv[] )
     return PX4_OK;
 }
 
+int monitor( void )
+{
+    if ( !thread_running.load() )
+    {
+        PX4_WARN( "not running" );
+        usage();
+        return PX4_ERROR;
+    }
+
+    struct pollfd fds = {
+        .fd = STDIN_FILENO,
+        .events = POLLIN  // Poll for input events from stdin
+    };
+
+    // User input polling loop
+    while ( true )
+    {
+        // Clear the screen
+        PX4_INFO_RAW( "\033[2J" );
+        // Move the cursor to the home position
+        PX4_INFO_RAW( "\033[H" );
+
+        // User prompt
+        PX4_INFO_RAW( "Press any key to exit\n" );
+
+        // Print the current gimbal status
+        status();
+
+        // Check for user input
+        if ( ::poll( &fds, 1, 0 ) > 0 )
+        {
+            // Exit if input is received
+            return PX4_OK;
+        }
+
+        // Sleep
+        px4_usleep( 1.5 * 1e6 );
+    }
+}
+
 int open_gimbal_main( int argc, char *argv[] )
 {
-    if ( argc < 2 )
+    static char *cmd;
+    cmd = argv[1];
+
+    // Verify the input
+    if ( argc < 2 || cmd == nullptr )
     {
         PX4_ERR( "missing command" );
         usage();
-        status();
         return PX4_ERROR;
     }
-    else if ( !strcmp( argv[1], "start" ) )
+
+    if ( !strcmp( cmd, "start" ) )
     {
         return start();
     }
-    else if ( !strcmp( argv[1], "test" ) )
+
+    if ( !strcmp( cmd, "test" ) )
     {
         return test( argc, argv );
     }
-    else if ( !strcmp( argv[1], "stop" ) )
+
+    if ( !strcmp( cmd, "stop" ) )
     {
         return stop();
     }
-    else if ( !strcmp( argv[1], "status" ) )
+
+    if ( !strcmp( cmd, "monitor" ) )
+    {
+        return monitor();
+    }
+
+    if ( !strcmp( cmd, "status" ) )
     {
         return status();
     }
 
-    PX4_ERR( "Unrecognized command '%s'", argv[1] );
+    PX4_ERR( "Unrecognized command '%s'", cmd );
     usage();
-
     return PX4_ERROR;
 }
 
+#define INIT_PARAM( handle, name )                                                      \
+    do                                                                                  \
+    {                                                                                   \
+        handle = param_find( name );                                                    \
+        if ( ( handle ) == PARAM_INVALID ) PX4_ERR( "failed to find parameter " name ); \
+    } while ( 0 )
+
+#define UPDATE_PARAM( handles, params, name )                                                          \
+    do                                                                                                 \
+    {                                                                                                  \
+        if ( param_get( handles.name, &params.name ) != PX4_OK )                                       \
+            PX4_ERR( "failed to update parameter `" #name "` (set to %d)", (int)( params.name = 0 ) ); \
+    } while ( 0 )
+
 void update_params( ParameterHandles &param_handles, Parameters &params )
 {
-    param_get( param_handles.og_mode_in, &params.og_mode_in );
-    param_get( param_handles.og_mode_out, &params.og_mode_out );
+    UPDATE_PARAM( param_handles, params, og_mode_in );
+    UPDATE_PARAM( param_handles, params, og_mode_out );
 
-    param_get( param_handles.og_man_pitch, &params.og_man_pitch );
-    param_get( param_handles.og_man_roll, &params.og_man_roll );
-    param_get( param_handles.og_man_yaw, &params.og_man_yaw );
+    UPDATE_PARAM( param_handles, params, og_man_pitch );
+    UPDATE_PARAM( param_handles, params, og_man_roll );
+    UPDATE_PARAM( param_handles, params, og_man_yaw );
 
-    param_get( param_handles.og_do_stab, &params.og_do_stab );
+    UPDATE_PARAM( param_handles, params, og_do_stab );
 
-    param_get( param_handles.og_range_pitch, &params.og_range_pitch );
-    param_get( param_handles.og_range_roll, &params.og_range_roll );
-    param_get( param_handles.og_range_yaw, &params.og_range_yaw );
+    UPDATE_PARAM( param_handles, params, og_range_pitch );
+    UPDATE_PARAM( param_handles, params, og_range_roll );
+    UPDATE_PARAM( param_handles, params, og_range_yaw );
 
-    param_get( param_handles.og_off_pitch, &params.og_off_pitch );
-    param_get( param_handles.og_off_roll, &params.og_off_roll );
-    param_get( param_handles.og_off_yaw, &params.og_off_yaw );
+    UPDATE_PARAM( param_handles, params, og_off_pitch );
+    UPDATE_PARAM( param_handles, params, og_off_roll );
+    UPDATE_PARAM( param_handles, params, og_off_yaw );
 
-    param_get( param_handles.og_rate_pitch, &params.og_rate_pitch );
-    param_get( param_handles.og_rate_yaw, &params.og_rate_yaw );
+    UPDATE_PARAM( param_handles, params, og_rate_pitch );
+    UPDATE_PARAM( param_handles, params, og_rate_yaw );
 
-    param_get( param_handles.og_rc_in_mode, &params.og_rc_in_mode );
+    UPDATE_PARAM( param_handles, params, og_rc_in_mode );
 
-    param_get( param_handles.og_comp_id, &params.og_comp_id );
+    UPDATE_PARAM( param_handles, params, og_comp_id );
 
-    param_get( param_handles.og_lnd_p_min, &params.og_lnd_p_min );
-    param_get( param_handles.og_lnd_p_max, &params.og_lnd_p_max );
+    UPDATE_PARAM( param_handles, params, og_lnd_p_min );
+    UPDATE_PARAM( param_handles, params, og_lnd_p_max );
 
-    param_get( param_handles.og_roll_p, &params.og_roll_p );
-    param_get( param_handles.og_roll_i, &params.og_roll_i );
-    param_get( param_handles.og_roll_d, &params.og_roll_d );
+    UPDATE_PARAM( param_handles, params, og_roll_p );
+    UPDATE_PARAM( param_handles, params, og_roll_i );
+    UPDATE_PARAM( param_handles, params, og_roll_d );
+    UPDATE_PARAM( param_handles, params, og_roll_imax );
+    UPDATE_PARAM( param_handles, params, og_roll_ff );
 
-    param_get( param_handles.og_pitch_p, &params.og_pitch_p );
-    param_get( param_handles.og_pitch_i, &params.og_pitch_i );
-    param_get( param_handles.og_pitch_d, &params.og_pitch_d );
+    UPDATE_PARAM( param_handles, params, og_pitch_p );
+    UPDATE_PARAM( param_handles, params, og_pitch_i );
+    UPDATE_PARAM( param_handles, params, og_pitch_d );
+    UPDATE_PARAM( param_handles, params, og_pitch_imax );
+    UPDATE_PARAM( param_handles, params, og_pitch_ff );
 
-    param_get( param_handles.og_yaw_p, &params.og_yaw_p );
-    param_get( param_handles.og_yaw_i, &params.og_yaw_i );
-    param_get( param_handles.og_yaw_d, &params.og_yaw_d );
+    UPDATE_PARAM( param_handles, params, og_yaw_p );
+    UPDATE_PARAM( param_handles, params, og_yaw_i );
+    UPDATE_PARAM( param_handles, params, og_yaw_d );
+    UPDATE_PARAM( param_handles, params, og_yaw_imax );
+    UPDATE_PARAM( param_handles, params, og_yaw_ff );
 
-    param_get( param_handles.og_debug1, &params.og_debug1 );
-    param_get( param_handles.og_debug2, &params.og_debug2 );
-    param_get( param_handles.og_debug3, &params.og_debug3 );
+    UPDATE_PARAM( param_handles, params, og_debug1 );
+    UPDATE_PARAM( param_handles, params, og_debug2 );
+    UPDATE_PARAM( param_handles, params, og_debug3 );
 }
-
-#define INIT_PARAM( handle, name, err_flag )                    \
-    do                                                          \
-    {                                                           \
-        if ( ( handle = param_find( name ) ) == PARAM_INVALID ) \
-        {                                                       \
-            PX4_ERR( "failed to find parameter " name );        \
-            err_flag = true;                                    \
-        }                                                       \
-    } while ( 0 )
 
 bool initialize_params( ParameterHandles &param_handles, Parameters &params )
 {
-    bool err_flag = false;
+    INIT_PARAM( param_handles.og_mode_in, "OG_MODE_IN" );
+    INIT_PARAM( param_handles.og_mode_out, "OG_MODE_OUT" );
 
-    INIT_PARAM( param_handles.og_mode_in, "OG_MODE_IN", err_flag );
-    INIT_PARAM( param_handles.og_mode_out, "OG_MODE_OUT", err_flag );
+    INIT_PARAM( param_handles.og_man_pitch, "OG_MAN_PITCH" );
+    INIT_PARAM( param_handles.og_man_roll, "OG_MAN_ROLL" );
+    INIT_PARAM( param_handles.og_man_yaw, "OG_MAN_YAW" );
 
-    INIT_PARAM( param_handles.og_man_pitch, "OG_MAN_PITCH", err_flag );
-    INIT_PARAM( param_handles.og_man_roll, "OG_MAN_ROLL", err_flag );
-    INIT_PARAM( param_handles.og_man_yaw, "OG_MAN_YAW", err_flag );
+    INIT_PARAM( param_handles.og_do_stab, "OG_DO_STAB" );
 
-    INIT_PARAM( param_handles.og_do_stab, "OG_DO_STAB", err_flag );
+    INIT_PARAM( param_handles.og_range_pitch, "OG_RANGE_PITCH" );
+    INIT_PARAM( param_handles.og_range_roll, "OG_RANGE_ROLL" );
+    INIT_PARAM( param_handles.og_range_yaw, "OG_RANGE_YAW" );
 
-    INIT_PARAM( param_handles.og_range_pitch, "OG_RANGE_PITCH", err_flag );
-    INIT_PARAM( param_handles.og_range_roll, "OG_RANGE_ROLL", err_flag );
-    INIT_PARAM( param_handles.og_range_yaw, "OG_RANGE_YAW", err_flag );
+    INIT_PARAM( param_handles.og_off_pitch, "OG_OFF_PITCH" );
+    INIT_PARAM( param_handles.og_off_roll, "OG_OFF_ROLL" );
+    INIT_PARAM( param_handles.og_off_yaw, "OG_OFF_YAW" );
 
-    INIT_PARAM( param_handles.og_off_pitch, "OG_OFF_PITCH", err_flag );
-    INIT_PARAM( param_handles.og_off_roll, "OG_OFF_ROLL", err_flag );
-    INIT_PARAM( param_handles.og_off_yaw, "OG_OFF_YAW", err_flag );
+    INIT_PARAM( param_handles.og_rate_pitch, "OG_RATE_PITCH" );
+    INIT_PARAM( param_handles.og_rate_yaw, "OG_RATE_YAW" );
 
-    INIT_PARAM( param_handles.og_rate_pitch, "OG_RATE_PITCH", err_flag );
-    INIT_PARAM( param_handles.og_rate_yaw, "OG_RATE_YAW", err_flag );
+    INIT_PARAM( param_handles.og_rc_in_mode, "OG_RC_IN_MODE" );
 
-    INIT_PARAM( param_handles.og_rc_in_mode, "OG_RC_IN_MODE", err_flag );
+    INIT_PARAM( param_handles.og_comp_id, "OG_COMP_ID" );
 
-    INIT_PARAM( param_handles.og_comp_id, "OG_COMP_ID", err_flag );
+    INIT_PARAM( param_handles.og_lnd_p_min, "OG_LND_P_MIN" );
+    INIT_PARAM( param_handles.og_lnd_p_max, "OG_LND_P_MAX" );
 
-    INIT_PARAM( param_handles.og_lnd_p_min, "OG_LND_P_MIN", err_flag );
-    INIT_PARAM( param_handles.og_lnd_p_max, "OG_LND_P_MAX", err_flag );
+    INIT_PARAM( param_handles.og_roll_p, "OG_ROLL_P" );
+    INIT_PARAM( param_handles.og_roll_i, "OG_ROLL_I" );
+    INIT_PARAM( param_handles.og_roll_d, "OG_ROLL_D" );
+    INIT_PARAM( param_handles.og_roll_imax, "OG_ROLL_IMAX" );
+    INIT_PARAM( param_handles.og_roll_ff, "OG_ROLL_FF" );
 
-    INIT_PARAM( param_handles.og_roll_p, "OG_ROLL_P", err_flag );
-    INIT_PARAM( param_handles.og_roll_i, "OG_ROLL_I", err_flag );
-    INIT_PARAM( param_handles.og_roll_d, "OG_ROLL_D", err_flag );
+    INIT_PARAM( param_handles.og_pitch_p, "OG_PITCH_P" );
+    INIT_PARAM( param_handles.og_pitch_i, "OG_PITCH_I" );
+    INIT_PARAM( param_handles.og_pitch_d, "OG_PITCH_D" );
+    INIT_PARAM( param_handles.og_roll_imax, "OG_PITCH_IMAX" );
+    INIT_PARAM( param_handles.og_roll_ff, "OG_PITCH_FF" );
 
-    INIT_PARAM( param_handles.og_pitch_p, "OG_PITCH_P", err_flag );
-    INIT_PARAM( param_handles.og_pitch_i, "OG_PITCH_I", err_flag );
-    INIT_PARAM( param_handles.og_pitch_d, "OG_PITCH_D", err_flag );
+    INIT_PARAM( param_handles.og_yaw_p, "OG_YAW_P" );
+    INIT_PARAM( param_handles.og_yaw_i, "OG_YAW_I" );
+    INIT_PARAM( param_handles.og_yaw_d, "OG_YAW_D" );
+    INIT_PARAM( param_handles.og_roll_imax, "OG_YAW_IMAX" );
+    INIT_PARAM( param_handles.og_roll_ff, "OG_YAW_FF" );
 
-    INIT_PARAM( param_handles.og_yaw_p, "OG_YAW_P", err_flag );
-    INIT_PARAM( param_handles.og_yaw_i, "OG_YAW_I", err_flag );
-    INIT_PARAM( param_handles.og_yaw_d, "OG_YAW_D", err_flag );
+    INIT_PARAM( param_handles.og_debug1, "OG_DEBUG1" );
+    INIT_PARAM( param_handles.og_debug2, "OG_DEBUG2" );
+    INIT_PARAM( param_handles.og_debug3, "OG_DEBUG3" );
 
-    INIT_PARAM( param_handles.og_debug1, "OG_DEBUG1", err_flag );
-    INIT_PARAM( param_handles.og_debug2, "OG_DEBUG2", err_flag );
-    INIT_PARAM( param_handles.og_debug3, "OG_DEBUG3", err_flag );
+    update_params( param_handles, params );
 
-    if ( !err_flag )
-    {
-        update_params( param_handles, params );
-    }
-
-    return !err_flag;
+    return true;
 }
 
 static void usage()
@@ -824,6 +688,7 @@ $ open_gimbal test pitch -45 yaw 30
         "test", "Test the output: set a fixed angle for one or multiple axes (gimbal must be running)"
     );
     PRINT_MODULE_USAGE_ARG( "<roll|pitch|yaw <angle>>", "Specify an axis and an angle in degrees", false );
+    PRINT_MODULE_USAGE_COMMAND_DESCR( "monitor", "Monitor the output of the gimbal" );
     PRINT_MODULE_USAGE_COMMAND_DESCR( "publish_attitude", "Publish a vehicle attitude message" );
     PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
     PRINT_MODULE_USAGE_COMMAND_DESCR( "version", "Current Version: " OG_VERSION );

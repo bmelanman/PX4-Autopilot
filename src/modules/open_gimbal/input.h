@@ -34,8 +34,10 @@
 #pragma once
 
 #include "common.h"
-#include "open_gimbal_params.h"
 #include "math.h"
+#include "open_gimbal_params.h"
+
+#define GIMBAL_INFO_MAX_NAME_LEN ( 32U )
 
 namespace open_gimbal {
 
@@ -43,27 +45,25 @@ struct Parameters;
 
 class InputBase {
    public:
-    enum class UpdateResult {
-        NoUpdate,
-        UpdatedActive,
-        UpdatedNotActive,
-    };
+    enum class UpdateResult { NoUpdate, UpdatedActive };
 
     InputBase() = delete;
     explicit InputBase( Parameters &parameters );
     virtual ~InputBase() = default;
 
     virtual int initialize() = 0;
-    virtual UpdateResult update( unsigned int timeout_ms, ControlData &control_data, bool already_active ) = 0;
-    virtual void print_status() const = 0;
+    virtual UpdateResult update( ControlData &control_data ) = 0;
+    virtual void print_status( bool is_active ) const = 0;
+
+    void update_params( const Parameters &parameters );
 
    protected:
-    void control_data_set_lon_lat(
-        ControlData &control_data, double lon, double lat, float altitude, float roll_angle = NAN,
-        float pitch_fixed_angle = NAN
-    );
-
     Parameters &_parameters;
+
+    // Gimbal Metadata
+    static constexpr char _gimbal_vendor_name[GIMBAL_INFO_MAX_NAME_LEN] = "ARK Electronics";
+    static constexpr char _gimbal_model_name[GIMBAL_INFO_MAX_NAME_LEN] = "OpenGimbal";
+    static constexpr char _gimbal_custom_name[GIMBAL_INFO_MAX_NAME_LEN] = "OG";
 };
 
 } /* namespace open_gimbal */

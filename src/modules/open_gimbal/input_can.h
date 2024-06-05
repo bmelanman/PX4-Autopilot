@@ -33,8 +33,11 @@
 
 #pragma once
 
+#include <uORB/topics/gimbal_device_information.h>
 #include <uORB/topics/gimbal_manager_set_attitude.h>
+#include <uORB/topics/vehicle_command.h>
 
+#include <uORB/Publication.hpp>
 #include <uORB/Subscription.hpp>
 
 #include "input.h"
@@ -48,14 +51,30 @@ class InputCAN : public InputBase {
 
     virtual ~InputCAN();
 
-    virtual void print_status() const;
-    virtual UpdateResult update( unsigned int timeout_ms, ControlData &control_data, bool already_active );
+    virtual void print_status( bool is_active ) const;
+    virtual UpdateResult update( ControlData &control_data );
     virtual int initialize();
 
    private:
-    uORB::Subscription _gimbal_manager_set_attitude_sub{ ORB_ID( gimbal_manager_set_attitude ) };
+    bool _connected = false;
+    matrix::Eulerf _last_input_euler_angle{ 0.f, 0.f, 0.f };
 
+    // Check for gimbal device information request
+    void _check_for_gimbal_device_information_request();
+    // Provide the gimbal device information response
+    void _provide_gimbal_device_information();
+
+    // Vehicle Command subscription
+    uORB::Subscription _vehicle_command_sub{ ORB_ID( vehicle_command ) };
+    // Gimbal controller subscription
+    uORB::Subscription _gimbal_manager_set_attitude_sub{ ORB_ID( gimbal_manager_set_attitude ) };
+    // Gimbal device information publication
+    uORB::Publication<gimbal_device_information_s> _gimbal_device_information_pub{ ORB_ID( gimbal_device_information )
+    };
+
+    vehicle_command_s vehicle_command{};
     gimbal_manager_set_attitude_s _gimbal_manager_set_attitude{};
+    gimbal_device_information_s gimbal_device_information{};
 };
 
 } /* namespace open_gimbal */

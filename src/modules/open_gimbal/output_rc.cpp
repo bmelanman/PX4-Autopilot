@@ -35,25 +35,59 @@
 
 #include <px4_platform_common/defines.h>
 #include <uORB/topics/gimbal_controls.h>
+#include <uORB/topics/vehicle_angular_velocity.h>
 
 #include <matrix/matrix/math.hpp>
 
 namespace open_gimbal {
 
-OutputRC::OutputRC( const Parameters &parameters ) : OutputBase( parameters ) {}
-
-int OutputRC::update( const ControlData &control_data, bool new_setpoints, bool new_params )
+OutputRC::OutputRC( Parameters &parameters ) : OutputBase( parameters )
 {
-    // Update if we have new setpoints
-    if ( new_setpoints && _set_angle_setpoints( control_data ) != PX4_OK )
+    // Set the euler setpoint to zero
+    // _euler_setpoint.zero();
+    _angle_setpoint.zero();
+    _gimbal_output_rad.zero();
+    // memset( _gimbal_output_rad, 0, sizeof( _gimbal_output_rad ) );
+
+    // Update the output to move the motors to a known position (0, 0, 0)
+    _publish_gimbal_output_rc( hrt_absolute_time() );
+}
+
+int OutputRC::_publish_gimbal_output_rc( const hrt_abstime &t_usec )
+{
+    // Publish the gimbal control outputs
+    gimbal_controls_s _gimbal_controls{};
+
+    _gimbal_controls.timestamp = t_usec;
+
+    // Normalize the output to the range [-1, 1] and send it to the motors
+    _gimbal_controls.control[OutputBase::_INDEX_ROLL] = _gimbal_output_rad( OutputBase::_INDEX_ROLL ) / M_PI_F;
+    _gimbal_controls.control[OutputBase::_INDEX_PITCH] = _gimbal_output_rad( OutputBase::_INDEX_PITCH ) / M_PI_F;
+    _gimbal_controls.control[OutputBase::_INDEX_YAW] = _gimbal_output_rad( OutputBase::_INDEX_YAW ) / M_PI_F;
+
+    // Publish the gimbal control outputs
+    if ( !_gimbal_controls_pub.publish( _gimbal_controls ) )
     {
         return PX4_ERROR;
+    }
+
+    _last_update_usec = t_usec;
+
+    return PX4_OK;
+}
+
+int OutputRC::update( const ControlData &control_data, bool new_setpoints )
+{
+    // Update if we have new setpoints
+    if ( new_setpoints )
+    {
+        _set_angle_setpoints( control_data );
     }
 
     hrt_abstime t = hrt_absolute_time();
 
     // Calculate the angle outputs
-    if ( _calculate_angle_output( t, new_params ) == PX4_ERROR )
+    if ( _calculate_angle_output( t ) == PX4_ERROR )
     {
         return PX4_ERROR;
     }
@@ -61,106 +95,117 @@ int OutputRC::update( const ControlData &control_data, bool new_setpoints, bool 
     // Publish the angle outputs
     _stream_device_attitude_status();
 
-    // Publish the gimbal control outputs
-    gimbal_controls_s gimbal_controls{};
-
-    gimbal_controls.control[OutputBase::_INDEX_ROLL] = _gimbal_output_norm[OutputBase::_INDEX_ROLL];
-    gimbal_controls.control[OutputBase::_INDEX_PITCH] = _gimbal_output_norm[OutputBase::_INDEX_PITCH];
-    gimbal_controls.control[OutputBase::_INDEX_YAW] = _gimbal_output_norm[OutputBase::_INDEX_YAW];
-
-    gimbal_controls.timestamp = hrt_absolute_time();
-    _gimbal_controls_pub.publish( gimbal_controls );
-
-    _last_update_usec = t;
-
-    return PX4_OK;
-}
-
-inline void _print_euler( const matrix::Eulerf &euler, bool rad_to_deg = false )
-{
-    if ( rad_to_deg )
-    {
-        PX4_INFO_RAW( "  Roll:  %8.4f \n", (double)( euler( 0 ) * M_RAD_TO_DEG_F ) );
-        PX4_INFO_RAW( "  Pitch: %8.4f \n", (double)( euler( 1 ) * M_RAD_TO_DEG_F ) );
-        PX4_INFO_RAW( "  Yaw:   %8.4f \n", (double)( euler( 2 ) * M_RAD_TO_DEG_F ) );
-    }
-    else
-    {
-        PX4_INFO_RAW( "  Roll:  %8.4f \n", (double)euler( 0 ) );
-        PX4_INFO_RAW( "  Pitch: %8.4f \n", (double)euler( 1 ) );
-        PX4_INFO_RAW( "  Yaw:   %8.4f \n", (double)euler( 2 ) );
-    }
-}
-
-inline void _print_euler( const float euler[3], bool r2d = false )
-{
-    _print_euler( matrix::Eulerf{ euler[0], euler[1], euler[2] }, r2d );
-}
-
-inline void _print_quat( const float q[4], bool r2d = false )
-{
-    // Convert the quaternion to Euler angles
-    _print_euler( matrix::Quatf{ q }, r2d );
+    return _publish_gimbal_output_rc( t );
 }
 
 void OutputRC::print_status() const
 {
-    PX4_INFO( "Output: AUX\n" );
-
     static uORB::Subscription _status_vehicle_attitude_sub{ ORB_ID( vehicle_attitude ) };
-    static vehicle_attitude_s vehicle_attitude{ 0 };
-    static matrix::Eulerf veh_att{ 0, 0, 0 };
+    static vehicle_attitude_s _stat_vehicle_att{ 0 };
 
-    PX4_INFO_RAW( "\n/* Vehicle Attitude ***************************/\n" );
+    static uORB::Subscription _status_vehicle_angular_velocity_sub{ ORB_ID( vehicle_angular_velocity ) };
+    static vehicle_angular_velocity_s _stat_vehicle_angular_vel{ 0 };
 
     // Get the current vehicle attitude
-    if ( _status_vehicle_attitude_sub.update( &vehicle_attitude ) )
+    if ( !_status_vehicle_attitude_sub.copy( &_stat_vehicle_att ) )
     {
-        veh_att = matrix::Eulerf( matrix::Quatf( vehicle_attitude.q ) );
-        _print_euler( veh_att, true );
-    }
-    else
-    {
-        PX4_INFO( "Vehicle attitude not available\n" );
+        memset( &_stat_vehicle_att, 0, sizeof( _stat_vehicle_att ) );
     }
 
-    matrix::Eulerf motor_offsets{ _parameters.og_off_roll, _parameters.og_off_pitch, _parameters.og_off_yaw };
+    if ( !_status_vehicle_angular_velocity_sub.copy( &_stat_vehicle_angular_vel ) )
+    {
+        memset( &_stat_vehicle_angular_vel, 0, sizeof( _stat_vehicle_angular_vel ) );
+    }
 
-    PX4_INFO_RAW( "\n/* Vehicle Attitude with Motor Offset *********/\n" );
-    _print_euler( veh_att + motor_offsets, true );
+    /* Vehicle Attitude */
+    static matrix::Vector3f veh_att{ 0, 0, 0 };
+    static matrix::Vector3f att_with_off{ 0, 0, 0 };
 
-    PX4_INFO_RAW( "\n/* Target Setpoint ****************************/\n" );
-    _print_euler( _euler_setpoint, true );
+    veh_att = matrix::Eulerf( matrix::Quatf{ _stat_vehicle_att.q } );
+    att_with_off = matrix::Vector3f(
+        matrix::wrap_pi( veh_att( 0 ) + math::radians( _parameters.og_off_roll ) ),
+        matrix::wrap_pi( veh_att( 1 ) + math::radians( _parameters.og_off_pitch ) ),
+        matrix::wrap_pi( veh_att( 2 ) + math::radians( _parameters.og_off_yaw ) )
+    );
 
-    PX4_INFO_RAW( "\n/* Output Angles ******************************/\n" );
-    _print_euler( _gimbal_output_rad, true );
+    /* Vehicle Angular Velocity */
+    static matrix::Vector3f veh_angular_vel{ 0, 0, 0 };
+    static matrix::Vector3f veh_angular_accel{ 0, 0, 0 };
 
-    PX4_INFO_RAW( "\n/* Output to Motors ***************************/\n" );
-    _print_euler( _gimbal_output_norm );
+    veh_angular_vel = matrix::Vector3f( _stat_vehicle_angular_vel.xyz );
+    veh_angular_accel = matrix::Vector3f( _stat_vehicle_angular_vel.xyz_derivative );
 
-    PX4_INFO_RAW( "\n/**********************************************/\n" );
+    PX4_INFO_RAW( "Output: AUX\n" );
+
+    PX4_INFO_RAW( "/* Vehicle Attitude ***************************/\n" );
+    PX4_INFO_RAW( "\tRoll:  %8.4f\n", (double)( veh_att( 0 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tPitch: %8.4f\n", (double)( veh_att( 1 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tYaw:   %8.4f\n", (double)( veh_att( 2 ) * M_RAD_TO_DEG_F ) );
+
+    PX4_INFO_RAW( "/* Vehicle Attitude with Motor Offset *********/\n" );
+    PX4_INFO_RAW( "\tRoll:  %8.4f\n", (double)( att_with_off( 0 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tPitch: %8.4f\n", (double)( att_with_off( 1 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tYaw:   %8.4f\n", (double)( att_with_off( 2 ) * M_RAD_TO_DEG_F ) );
+
+    PX4_INFO_RAW( "/* Vehicle Angular Velocity *******************/\n" );
+    PX4_INFO_RAW( "\tRoll:  %8.4f\n", (double)( veh_angular_vel( 0 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tPitch: %8.4f\n", (double)( veh_angular_vel( 1 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tYaw:   %8.4f\n", (double)( veh_angular_vel( 2 ) * M_RAD_TO_DEG_F ) );
+
+    PX4_INFO_RAW( "/* Vehicle Angular Acceleration ***************/\n" );
+    PX4_INFO_RAW( "\tRoll:  %8.4f\n", (double)( veh_angular_accel( 0 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tPitch: %8.4f\n", (double)( veh_angular_accel( 1 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tYaw:   %8.4f\n", (double)( veh_angular_accel( 2 ) * M_RAD_TO_DEG_F ) );
+
+    PX4_INFO_RAW( "/* Target Setpoint ****************************/\n" );
+    PX4_INFO_RAW( "\tRoll:  %8.4f\n", (double)( _angle_setpoint( 0 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tPitch: %8.4f\n", (double)( _angle_setpoint( 1 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tYaw:   %8.4f\n", (double)( _angle_setpoint( 2 ) * M_RAD_TO_DEG_F ) );
+
+    // clang-format off
+    PX4_INFO_RAW( "/* Rate Controller Output Rates ***************/\n" );
+    PX4_INFO_RAW( "\tdt: %8.4f [ms]\n", (double)_debug_dt * MSEC_PER_SEC );
+    PX4_INFO_RAW( "\tsp_error:       { %8.4f, %8.4f, %8.4f } [rad]\n", (double)_debug_sp_error(1),(double)_debug_sp_error(1),(double)_debug_sp_error(3));
+    PX4_INFO_RAW( "\trates:          { %8.4f, %8.4f, %8.4f } [rad/s]\n", (double)_debug_rates(1),(double)_debug_rates(1),(double)_debug_rates(3));
+    PX4_INFO_RAW( "\trates_setpoint: { %8.4f, %8.4f, %8.4f } [rad/s]\n", (double)_debug_rates_setpoint(1),(double)_debug_rates_setpoint(1),(double)_debug_rates_setpoint(3));
+    PX4_INFO_RAW( "\tangular_accel:  { %8.4f, %8.4f, %8.4f } [rad/s]\n", (double)_debug_angular_accel(1),(double)_debug_angular_accel(1),(double)_debug_angular_accel(3));
+    PX4_INFO_RAW( "\tupdated_rate:   { %8.4f, %8.4f, %8.4f } [rad/s]\n", (double)_debug_updated_rate(1),(double)_debug_updated_rate(1),(double)_debug_updated_rate(3));
+    // clang-format on
+
+    PX4_INFO_RAW( "/* Output Angles ******************************/\n" );
+    PX4_INFO_RAW( "\tRoll:  %8.4f\n", (double)( _gimbal_output_rad( 0 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tPitch: %8.4f\n", (double)( _gimbal_output_rad( 1 ) * M_RAD_TO_DEG_F ) );
+    PX4_INFO_RAW( "\tYaw:   %8.4f\n", (double)( _gimbal_output_rad( 2 ) * M_RAD_TO_DEG_F ) );
+
+    PX4_INFO_RAW( "/**********************************************/\n" );
 }
 
 void OutputRC::_stream_device_attitude_status()
 {
     // Publish the attitude status
-    gimbal_device_attitude_status_s attitude_status{};
+    gimbal_device_attitude_status_s _gimbal_attitude_status{};
 
-    attitude_status.timestamp = hrt_absolute_time();
-    attitude_status.target_system = 0;
-    attitude_status.target_component = 0;
-    attitude_status.device_flags = gimbal_device_attitude_status_s::DEVICE_FLAGS_NEUTRAL |
-                                   gimbal_device_attitude_status_s::DEVICE_FLAGS_ROLL_LOCK |
-                                   gimbal_device_attitude_status_s::DEVICE_FLAGS_PITCH_LOCK |
-                                   gimbal_device_attitude_status_s::DEVICE_FLAGS_YAW_LOCK;
+    _gimbal_attitude_status.timestamp = hrt_absolute_time();
+    _gimbal_attitude_status.target_system = 0;
+    _gimbal_attitude_status.target_component = 0;
+    _gimbal_attitude_status.device_flags = gimbal_device_attitude_status_s::DEVICE_FLAGS_NEUTRAL |
+                                           gimbal_device_attitude_status_s::DEVICE_FLAGS_ROLL_LOCK |
+                                           gimbal_device_attitude_status_s::DEVICE_FLAGS_PITCH_LOCK |
+                                           gimbal_device_attitude_status_s::DEVICE_FLAGS_YAW_LOCK;
 
-    matrix::Eulerf euler(
-        _gimbal_output_norm[OutputBase::_INDEX_ROLL] * 180.0f, _gimbal_output_norm[OutputBase::_INDEX_PITCH] * 180.0f,
-        _gimbal_output_norm[OutputBase::_INDEX_YAW] * 180.0f
-    );
+    matrix::Quatf q( matrix::Eulerf(
+        _gimbal_output_rad( OutputBase::_INDEX_ROLL ),   //
+        _gimbal_output_rad( OutputBase::_INDEX_PITCH ),  //
+        _gimbal_output_rad( OutputBase::_INDEX_YAW )     //
+    ) );
 
-    attitude_status.failure_flags = 0;
-    _attitude_status_pub.publish( attitude_status );
+    _gimbal_attitude_status.q[0] = q( 0 );
+    _gimbal_attitude_status.q[1] = q( 1 );
+    _gimbal_attitude_status.q[2] = q( 2 );
+    _gimbal_attitude_status.q[3] = q( 3 );
+
+    _gimbal_attitude_status.failure_flags = 0;
+    _attitude_status_pub.publish( _gimbal_attitude_status );
 }
 
 } /* namespace open_gimbal */

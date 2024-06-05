@@ -35,73 +35,48 @@
 
 #include <px4_platform_common/defines.h>
 
+// 180 degrees as a float
+#define M_180_F 180.0f
+
 // Minimum and maximum time step in seconds
-#define DELTA_T_MIN 0.001f
-#define DELTA_T_MAX 1.0f
+#define DELTA_T_MIN 0.000125f
+#define DELTA_T_MAX 0.02f
+
+// Maximum output angular velocity in rad/s
+#define MAX_ANGULAR_VEL 10.0f
 
 // Scale factor for the rate controller output
 #define RATE_SCALE_FACTOR ( 2U )
 
 namespace open_gimbal {
 
-OutputBase::OutputBase( const Parameters &parameters ) : _parameters( parameters )
+OutputBase::OutputBase( Parameters &parameters ) : _parameters( parameters )
 {
     _last_update_usec = hrt_absolute_time();
 
     // Initialize the rate controller
     _rate_controller = new RateControl();
-
-    // Initialize the PID params
-    _param_pid_roll_p = param_find( "OG_ROLL_P" );
-    _param_pid_roll_i = param_find( "OG_ROLL_I" );
-    _param_pid_roll_d = param_find( "OG_ROLL_D" );
-    _param_pid_roll_imax = param_find( "OG_ROLL_IMAX" );
-    _param_pid_roll_ff = param_find( "OG_ROLL_FF" );
-
-    _param_pid_pitch_p = param_find( "OG_PITCH_P" );
-    _param_pid_pitch_i = param_find( "OG_PITCH_I" );
-    _param_pid_pitch_d = param_find( "OG_PITCH_D" );
-    _param_pid_pitch_imax = param_find( "OG_PITCH_IMAX" );
-    _param_pid_pitch_ff = param_find( "OG_PITCH_FF" );
-
-    _param_pid_yaw_p = param_find( "OG_YAW_P" );
-    _param_pid_yaw_i = param_find( "OG_YAW_I" );
-    _param_pid_yaw_d = param_find( "OG_YAW_D" );
-    _param_pid_yaw_imax = param_find( "OG_YAW_IMAX" );
-    _param_pid_yaw_ff = param_find( "OG_YAW_FF" );
 }
 
 void OutputBase::publish()
 {
-    // TODO: What is this for?
-    // mount_orientation_s mount_orientation{};
+    mount_orientation_s mount_orientation{};
 
-    // mount_orientation.attitude_euler_angle[OutputBase::_INDEX_ROLL] = _gimbal_output_rad[OutputBase::_INDEX_ROLL];
-    // mount_orientation.attitude_euler_angle[OutputBase::_INDEX_PITCH] = _gimbal_output_rad[OutputBase::_INDEX_PITCH];
-    // mount_orientation.attitude_euler_angle[OutputBase::_INDEX_YAW] = _gimbal_output_rad[OutputBase::_INDEX_YAW];
+    mount_orientation.attitude_euler_angle[OutputBase::_INDEX_ROLL] = _gimbal_output_rad( OutputBase::_INDEX_ROLL );
+    mount_orientation.attitude_euler_angle[OutputBase::_INDEX_PITCH] = _gimbal_output_rad( OutputBase::_INDEX_PITCH );
+    mount_orientation.attitude_euler_angle[OutputBase::_INDEX_YAW] = _gimbal_output_rad( OutputBase::_INDEX_YAW );
 
-    // mount_orientation.timestamp = hrt_absolute_time();
+    mount_orientation.timestamp = hrt_absolute_time();
 
-    //_mount_orientation_pub.publish(mount_orientation);
+    _mount_orientation_pub.publish( mount_orientation );
 }
 
-int OutputBase::_set_angle_setpoints( const ControlData &control_data )
+void OutputBase::_set_angle_setpoints( const ControlData &control_data )
 {
-    _euler_setpoint = matrix::Eulerf( control_data.euler_angle );
-
-    return PX4_OK;
-}
-
-void _print_euler( const matrix::Eulerf &euler, const char *prefix = "" )
-{
-    PX4_INFO_RAW(
-        "  %18.18s: %8.4f, %8.4f, %8.4f\n", prefix, (double)euler( 0 ), (double)euler( 1 ), (double)euler( 2 )
-    );
-}
-
-void _print_euler( const float euler[3], const char *prefix = "" )
-{
-    _print_euler( matrix::Eulerf{ euler[0], euler[1], euler[2] }, prefix );
+    // _euler_setpoint = matrix::Eulerf( control_data.euler_angle );
+    _angle_setpoint( 0 ) = control_data.input_angle_rad( 0 );
+    _angle_setpoint( 1 ) = control_data.input_angle_rad( 1 );
+    _angle_setpoint( 2 ) = control_data.input_angle_rad( 2 );
 }
 
 void OutputBase::_update_rate_controller( void )
@@ -109,37 +84,68 @@ void OutputBase::_update_rate_controller( void )
     static matrix::Vector3f gains_p{ 0 }, gains_i{ 0 }, gains_d{ 0 }, int_lim{ 0 }, gains_ff{ 0 };
 
     /* PID Gains */
-    param_get( _param_pid_roll_p, &gains_p( 0 ) );
-    param_get( _param_pid_roll_i, &gains_i( 0 ) );
-    param_get( _param_pid_roll_d, &gains_d( 0 ) );
+    gains_p( 0 ) = _parameters.og_roll_p;
+    gains_i( 0 ) = _parameters.og_roll_i;
+    gains_d( 0 ) = _parameters.og_roll_d;
 
-    param_get( _param_pid_pitch_p, &gains_p( 1 ) );
-    param_get( _param_pid_pitch_i, &gains_i( 1 ) );
-    param_get( _param_pid_pitch_d, &gains_d( 1 ) );
+    gains_p( 1 ) = _parameters.og_pitch_p;
+    gains_i( 1 ) = _parameters.og_pitch_i;
+    gains_d( 1 ) = _parameters.og_pitch_d;
 
-    param_get( _param_pid_yaw_p, &gains_p( 2 ) );
-    param_get( _param_pid_yaw_i, &gains_i( 2 ) );
-    param_get( _param_pid_yaw_d, &gains_d( 2 ) );
+    gains_p( 2 ) = _parameters.og_yaw_p;
+    gains_i( 2 ) = _parameters.og_yaw_i;
+    gains_d( 2 ) = _parameters.og_yaw_d;
 
     _rate_controller->setPidGains( gains_p, gains_i, gains_d );
 
     /* Integral Limits */
-    param_get( _param_pid_roll_imax, &int_lim( 0 ) );
-    param_get( _param_pid_pitch_imax, &int_lim( 1 ) );
-    param_get( _param_pid_yaw_imax, &int_lim( 2 ) );
+    int_lim( 0 ) = _parameters.og_roll_imax;
+    int_lim( 1 ) = _parameters.og_pitch_imax;
+    int_lim( 2 ) = _parameters.og_yaw_imax;
 
     _rate_controller->setIntegratorLimit( int_lim );
 
     /* Feed Forward Gains */
-    param_get( _param_pid_roll_ff, &gains_ff( 0 ) );
-    param_get( _param_pid_pitch_ff, &gains_ff( 1 ) );
-    param_get( _param_pid_yaw_ff, &gains_ff( 2 ) );
+    gains_ff( 0 ) = _parameters.og_roll_ff;
+    gains_ff( 1 ) = _parameters.og_pitch_ff;
+    gains_ff( 2 ) = _parameters.og_yaw_ff;
 
     _rate_controller->setFeedForwardGain( gains_ff );
+
+    PX4_INFO( "Rate controller gains updated" );
 }
 
-int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec, bool new_params )
+void OutputBase::_publish_rate_ctrl_status( void )
 {
+    static rate_ctrl_status_s rate_ctrl_status;
+
+    _rate_controller->getRateControlStatus( rate_ctrl_status );
+    rate_ctrl_status.timestamp = hrt_absolute_time();
+
+    _rate_ctrl_status_pub.publish( rate_ctrl_status );
+}
+
+void OutputBase::_update_debug(
+    float dt, matrix::Vector3f err, matrix::Vector3f rates, matrix::Vector3f rates_sp, matrix::Vector3f angular_accel,
+    matrix::Vector3f updated_rate
+)
+{
+    _debug_dt = dt;
+    _debug_sp_error = err;
+    _debug_rates = rates;
+    _debug_rates_setpoint = rates_sp;
+    _debug_angular_accel = angular_accel;
+    _debug_updated_rate = updated_rate;
+}
+
+int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec )
+{
+    // TODO: Add _landed check
+    bool _is_landed = false;
+
+    vehicle_attitude_s _vehicle_att_data{ 0 };
+    vehicle_angular_velocity_s _vehicle_angular_vel_data{ 0 };
+
     // Check if the vehicle is currently landed
     // if (_vehicle_land_detected_sub.updated()) {
     //	vehicle_land_detected_s vehicle_land_detected;
@@ -149,124 +155,110 @@ int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec, bool new_par
     //	}
     //}
 
-    int i;
-
-    // Get the vehicle attitude and angular velocity
-    vehicle_attitude_s vehicle_attitude;
-    vehicle_angular_velocity_s vehicle_angular_velocity;
-
-    // Validate the vehicle attitude
-    if ( !_vehicle_attitude_sub.copy( &vehicle_attitude ) )
+    // Get the vehicle attitude
+    if ( !_vehicle_attitude_sub.copy( &_vehicle_att_data ) )
     {
-        PX4_ERR( "Failed to get vehicle attitude! :(" );
-
-        for ( i = 0; i < 3; ++i )
-        {
-            _gimbal_output_rad[i] = 0.0f;
-            _gimbal_output_norm[i] = 0.0f;
-        }
-
-        return PX4_ERROR;
+        memset( &_vehicle_att_data, 0, sizeof( _vehicle_att_data ) );
     }
 
-    // Validate the vehicle angular velocity
-    if ( !_vehicle_angular_velocity_sub.copy( &vehicle_angular_velocity ) )
+    // Get the vehicle angular velocity
+    if ( !_vehicle_angular_velocity_sub.copy( &_vehicle_angular_vel_data ) )
     {
-        PX4_ERR( "Failed to get vehicle angular velocity! :(" );
-
-        for ( i = 0; i < 3; ++i )
-        {
-            _gimbal_output_rad[i] = 0.0f;
-            _gimbal_output_norm[i] = 0.0f;
-        }
-
-        return PX4_ERROR;
+        memset( &_vehicle_angular_vel_data, 0, sizeof( _vehicle_angular_vel_data ) );
     }
 
-    // Validate the gimbal setpoints
-    if ( !_euler_setpoint.isAllFinite() )
-    {
-        PX4_ERR( "Invalid setpoint quaternions! :(" );
-
-        for ( i = 0; i < 3; ++i )
-        {
-            _gimbal_output_rad[i] = 0.0f;
-            _gimbal_output_norm[i] = 0.0f;
-        }
-
-        return PX4_ERROR;
-    }
-
-    // TODO: Add _landed check
-    bool _is_landed = false;
+    static unsigned int i;
 
     // Get the time delta and constrain it
-    float dt_usec = math::constrain( (float)( t_usec - _last_update_usec ) / USEC_PER_SEC, DELTA_T_MIN, DELTA_T_MAX );
+    const float dt = math::constrain( (float)( t_usec - _last_update_usec ) / USEC_PER_SEC, DELTA_T_MIN, DELTA_T_MAX );
 
-    // Convert the vehicle attitude to euler angles
-    matrix::Eulerf euler_vehicle{ matrix::Quatf( vehicle_attitude.q ) };
+    matrix::Quatf curr_veh_att_q{ _vehicle_att_data.q };
+    matrix::Vector3f rates_rad_s{ _vehicle_angular_vel_data.xyz };                  //>> units are rad/s
+    matrix::Vector3f ang_accel_rad_s2{ _vehicle_angular_vel_data.xyz_derivative };  //>> units are rad/s^2
+    matrix::Vector3f rates_sp_rad_s{};                                              //>> units are rad/s
+    matrix::Vector3f sp_error{};
 
-    // Convert the vehicle angular velocity to euler angles
-    matrix::Eulerf euler_angular_accel{
-        vehicle_angular_velocity.xyz_derivative[0], vehicle_angular_velocity.xyz_derivative[1],
-        vehicle_angular_velocity.xyz_derivative[2]
+    matrix::Vector3f ranges_rad{
+        math::radians( _parameters.og_range_roll ),   //
+        math::radians( _parameters.og_range_pitch ),  //
+        math::radians( _parameters.og_range_yaw )     //
     };
 
-    // Get the zero offsets for the motors
-    const matrix::Eulerf zero_offsets{ _parameters.og_off_roll, _parameters.og_off_pitch, _parameters.og_off_yaw };
+    matrix::Vector3f zero_offsets_rad{
+        math::radians( _parameters.og_off_roll ),   //
+        math::radians( _parameters.og_off_pitch ),  //
+        math::radians( _parameters.og_off_yaw )     //
+    };
 
-    // TODO: Constrain the output to the given range params
-    // Get the current angle offsets and ranges
-    // const matrix::Eulerf ranges_rad = {
-    //	math::radians(_parameters.og_range_roll),
-    //	math::radians(_parameters.og_range_pitch),
-    //	math::radians(_parameters.og_range_yaw)
-    //};
-
-    // Update the rate controller when necessary
-    if ( new_params )
+    // Calculate the necessary angular velocity to reach the setpoint within `dt` seconds
+    for ( i = 0; i < 3; ++i )
     {
-        _update_rate_controller();
-        PX4_INFO( "Rate controller updated" );
+        if ( PX4_ISFINITE( _angle_setpoint( i ) ) )
+        {
+            // Find the difference between where we are and were we want to be
+            sp_error( i ) = ( ( _angle_setpoint( i ) - zero_offsets_rad( i ) ) - _gimbal_output_rad( i ) );
+
+            // Convert the setpoint error to rad/s and apply a speed limit
+            rates_sp_rad_s( i ) = math::constrain( sp_error( i ) / dt, -_parameters.og_debug1, _parameters.og_debug1 );
+        }
+        else
+        {
+            if ( _parameters.og_debug2 > 0.0f )
+            {
+                PX4_ERR(
+                    "Setpoint %d is not finite: { %8.4f, %8.4f, %8.4f }", i, (double)_angle_setpoint( 0 ),
+                    (double)_angle_setpoint( 1 ), (double)_angle_setpoint( 2 )
+                );
+            }
+            // If the setpoint is not finite, set the setpoint to the current angle
+            rates_sp_rad_s( i ) = rates_rad_s( i );
+        }
     }
 
-    // Run the rate controller
-    matrix::Eulerf updated_rate =
-        _rate_controller->update(
-            euler_vehicle - zero_offsets, _euler_setpoint, euler_angular_accel, dt_usec, _is_landed
-        ) *
-        M_2_PI_F * RATE_SCALE_FACTOR;
+    // Run the rate controller and convert the output from rad/s to rad
+    matrix::Vector3f updated_rate_rad =  //>> units are ( rad/s * s ) = rad
+        _rate_controller->update( rates_rad_s, rates_sp_rad_s, ang_accel_rad_s2, dt, _is_landed ) * dt;
+
+    // Publish rate controller status
+    _publish_rate_ctrl_status();
+
+    // Debug: Update the debug variables
+    _update_debug( dt, sp_error, rates_rad_s, rates_sp_rad_s, ang_accel_rad_s2, updated_rate_rad );
 
     for ( i = 0; i < 3; ++i )
     {
-        // Make sure the output is within the range [-pi, pi]
-        _gimbal_output_rad[i] = matrix::wrap_pi( updated_rate( i ) );
+        // Keep the output within [-pi, pi]
+        _gimbal_output_rad( i ) = matrix::wrap_pi( _gimbal_output_rad( i ) + updated_rate_rad( i ) );
 
-        // Normalize the output to [-1, 1]
-        _gimbal_output_norm[i] = _gimbal_output_rad[i] / M_PI_F;
+        // Limit the range of each axis (only if the range is positive and non-zero)
+        // if ( ranges_rad( i ) > 0.0f && ranges_rad( i ) < M_PI_F )
+        //{
+        //    _gimbal_output_rad(i) = math::constrain( _gimbal_output_rad(i), -ranges_rad( i ), ranges_rad( i ) );
+        //}
+
+        // Account for the zero offsets
+        //_gimbal_output_rad( i ) -= zero_offsets_rad( i );
     }
-
-    // static uint32_t counter = 0;
-    // if (_parameters.og_debug1 > 0 && (counter++ % (uint32_t)(_parameters.og_debug1 * 100)) == 0) {
-    //	PX4_INFO("Gimbal outputs:");
-    //	_print_euler(euler_vehicle, "euler_vehicle");
-    //	_print_euler(euler_angular_accel, "euler_angular_accel");
-    //	_print_euler(updated_rate, "updated_rate");
-    //	_print_euler(_gimbal_output_rad, "gimbal_output_rad");
-    //	PX4_INFO_RAW("  %18s: %8.4f (usec)\n\n", "dt_usec", (double)dt_usec);
-    // }
 
     // constrain pitch to [OG_LND_P_MIN, OG_LND_P_MAX] if landed
     // if (_landed) {
-    //	if (PX4_ISFINITE(_gimbal_output_rad[1])) {
-    //		_gimbal_output_rad[1] = _translate_angle2gimbal(
-    //					    _gimbal_output_rad[1],
+    //	if (PX4_ISFINITE(_gimbal_output_rad(OutputBase::_INDEX_PITCH))) {
+    //		_gimbal_output_rad(OutputBase::_INDEX_PITCH) = _translate_angle2gimbal(
+    //					    _gimbal_output_rad(OutputBase::_INDEX_PITCH),
     //					    _parameters.og_off_pitch,
     //					    _parameters.og_range_pitch);
     //	}
     //}
 
     return PX4_OK;
+}
+
+void OutputBase::update_params( const Parameters &parameters )
+{
+    memcpy( &_parameters, &parameters, sizeof( Parameters ) );
+
+    // Update the rate controller gains
+    _update_rate_controller();
 }
 
 void OutputBase::set_stabilize( bool roll_stabilize, bool pitch_stabilize, bool yaw_stabilize )
