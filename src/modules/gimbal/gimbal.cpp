@@ -391,7 +391,8 @@ int gimbal_main(int argc, char *argv[])
 				return 0;
 			}
 
-			const int timeout_ms = 1000, stdin_fileno = STDIN_FILENO;
+			const int stdin_fileno = STDIN_FILENO, timeout_ms = 1000, inc_max = 15;
+			unsigned int inc = 1;
 			matrix::Vector3f angles = { 0, 0, 0 };
 
 			struct pollfd fds;
@@ -402,7 +403,8 @@ int gimbal_main(int argc, char *argv[])
 			PX4_INFO_RAW("\033[2J\033[H");
 
 			// Print gimbal control instructions
-			PX4_INFO_RAW("Gimbal controls:\n");
+			PX4_INFO_RAW("                                     \n");
+			PX4_INFO_RAW("Gimbal controls:			   \n");
 			PX4_INFO_RAW("                                     \n");
 			PX4_INFO_RAW("\t         Pitch Up                  \n");
 			PX4_INFO_RAW("\t                v                  \n");
@@ -411,43 +413,49 @@ int gimbal_main(int argc, char *argv[])
 			PX4_INFO_RAW("\t                ^                  \n");
 			PX4_INFO_RAW("\t                Pitch Down         \n");
 			PX4_INFO_RAW("                                     \n");
+			PX4_INFO_RAW("\t+ -> Increase increment            \n");
+			PX4_INFO_RAW("\t- -> Decrease increment            \n");
+			PX4_INFO_RAW("                                     \n");
 			PX4_INFO_RAW("\tR -> Reset to 0,0,0                \n");
-			PX4_INFO_RAW("\tX -> Exit test mode                \n\n");
+			PX4_INFO_RAW("\tX -> Exit test mode                \n");
+			PX4_INFO_RAW("                                     \n");
 
 			// Save the current cursor position
 			PX4_INFO_RAW("\033[7");
 
 			// User input polling loop
 			while (true) {
+
 				// Poll stdin
 				if (::poll( &fds, 1, timeout_ms) > 0) {
+
 					// Get the character
 					::read(stdin_fileno, &c, 1);
 
 					// Parse the character
 					switch (tolower(c)) {
 					case 'q':  // Roll left - Add when positive, subtract when negative
-						angles(0) += (angles(0) < 0) ? (-1) : (1);
+						angles(0) += (angles(0) < 0) ? (-inc) : (inc);
 						break;
 
 					case 'e':  // Roll right - Add when negative, subtract when positive
-						angles(0) -= (angles(0) < 0) ? (-1) : (1);
+						angles(0) -= (angles(0) < 0) ? (-inc) : (inc);
 						break;
 
 					case 'w':  // Pitch up
-						angles(1) += (angles(1) < 0) ? (-1) : (1);
+						angles(1) += (angles(1) < 0) ? (-inc) : (inc);
 						break;
 
 					case 's':  // Pitch down
-						angles(1) -= (angles(1) < 0) ? (-1) : (1);
+						angles(1) -= (angles(1) < 0) ? (-inc) : (inc);
 						break;
 
 					case 'a':  // Yaw left
-						angles(2) += (angles(2) < 0) ? (-1) : (1);
+						angles(2) += (angles(2) < 0) ? (-inc) : (inc);
 						break;
 
 					case 'd':  // Yaw right
-						angles(2) -= (angles(2) < 0) ? (-1) : (1);
+						angles(2) -= (angles(2) < 0) ? (-inc) : (inc);
 						break;
 
 					case 'r':  // Reset all angles to 0
@@ -457,6 +465,14 @@ int gimbal_main(int argc, char *argv[])
 					case 'x':  // Exit testing
 						return 0;
 
+					case '+':  // Increase the increment
+						inc = std::min(inc + 1, inc_max);
+						break;
+
+					case '-':  // Decrease the increment
+						inc = std::max(inc - 1, 0);
+						break;
+
 					default:
 						break;
 					}
@@ -465,6 +481,9 @@ int gimbal_main(int argc, char *argv[])
 					math::wrap_pi(angles(0));
 					math::wrap_pi(angles(1));
 					math::wrap_pi(angles(2));
+
+					// Set the test input
+					g_thread_data->test_input->set_test_input(angles(0), angles(1), angles(2));
 				}
 
 				// Restore the cursor position and clear the current line
@@ -475,9 +494,6 @@ int gimbal_main(int argc, char *argv[])
 					"Current Output: { roll: %3.1f, pitch: %3.1f, yaw: %3.1f }\n", (double)angles(0),
 					(double)angles(1), (double)angles(2)
 				);
-
-				// Set the test input
-				g_thread_data->test_input->set_test_input(angles(0), angles(1), angles(2));
 			}
 
 		} else {
