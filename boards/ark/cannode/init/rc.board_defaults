@@ -7,8 +7,8 @@
 # System Parameters
 #------------------------------------------------------------------------------
 
-# Account for board rotation (Roll: 0, Pitch: 0, Yaw: 90)
-param set-default SENS_BOARD_ROT 2
+# Account for board rotation (Roll: 0, Pitch: 0, Yaw: 0)
+param set-default SENS_BOARD_ROT 0
 
 # Notify if the IMU is clipping
 param set-default SENS_IMU_CLPNOTI 0
@@ -17,13 +17,13 @@ param set-default SENS_IMU_CLPNOTI 0
 param set-default SENS_IMU_AUTOCAL 1
 param set-default SENS_IMU_MODE 1
 
-# Configure sensor priority to 'high'
-param set-default CAL_ACC0_PRIO  75
-param set-default CAL_GYRO0_PRIO 75
+# Configure the accel and gyro
+param set-default CAL_ACC0_PRIO  100 # Priority MAX
+param set-default CAL_GYRO0_PRIO 100 # Priority MAX
 
 # Disable unused sensors
-param set-default SYS_HAS_GPS 0
-param set-default SYS_HAS_MAG 0
+param set-default SYS_HAS_GPS  0
+param set-default SYS_HAS_MAG  0
 param set-default SYS_HAS_BARO 0
 
 # Set axis limits
@@ -44,6 +44,72 @@ param set-default ATT_MAG_DECL_A 1
 
 # Start the attitude estimator
 attitude_estimator_q start
+
+#------------------------------------------------------------------------------
+# Commander Module
+#------------------------------------------------------------------------------
+
+# Disable unused safety checks
+param set-default COM_CPU_MAX -1
+param set-default COM_ARM_SDCARD 0
+param set-default COM_MOT_TEST_EN 0
+param set-default COM_ARM_MAG_STR 0
+param set-default CBRK_SUPPLY_CHK 894281
+
+# Allow arming without GPS
+param set-default COM_ARM_WO_GPS 1
+
+# Set the prearmed state to 2 (always)
+param set-default COM_PREARM_MODE 2
+
+# Start the commander module
+commander start
+
+#------------------------------------------------------------------------------
+# Open-Gimbal Module
+#------------------------------------------------------------------------------
+
+# A limit of [-180, 180] is set by default
+param set-default OG_RANGE_PITCH   0
+param set-default OG_RANGE_ROLL    0
+param set-default OG_RANGE_YAW     0
+
+# Reset motor zero offsets
+param set-default OG_OFF_ROLL  0
+param set-default OG_OFF_PITCH 0
+param set-default OG_OFF_YAW   0
+
+# Roll needs a -45 degree offset
+param set OG_OFF_ROLL -45.0
+
+# Roll PID Gains
+param set-default OG_ROLL_P     0.05
+param set-default OG_ROLL_I     0.10
+param set-default OG_ROLL_D     0.00
+param set-default OG_ROLL_IMAX  0.20
+param set-default OG_ROLL_FF    0.50
+
+# Pitch PID Gains
+param set-default OG_PITCH_P    0.05
+param set-default OG_PITCH_I    0.20
+param set-default OG_PITCH_D    0.00
+param set-default OG_PITCH_IMAX 0.40
+param set-default OG_PITCH_FF   0.50
+
+# Yaw PID Gains
+param set-default OG_YAW_P      0.05
+param set-default OG_YAW_I      0.10
+param set-default OG_YAW_D      0.00
+param set-default OG_YAW_IMAX   0.20
+param set-default OG_YAW_FF     0.30
+
+# Debug variables
+param set-default OG_DEBUG1 0
+param set-default OG_DEBUG2 0
+param set-default OG_DEBUG3 0
+
+# Start Open-Gimbal
+open_gimbal start
 
 #------------------------------------------------------------------------------
 # PWM Output Module
@@ -75,7 +141,7 @@ param set-default PWM_MAIN_MIN3  1000 # Default
 param set-default PWM_MAIN_MAX3  2000 # Default
 param set-default PWM_MAIN_DIS3  1000 # Default
 param set-default PWM_MAIN_FAIL3 -1   # Default
-param set-default PWM_MAIN_REV   0b00000100 # Reverse PWM_MAIN Ch. 3 (Bit 2)
+param set-default PWM_MAIN_REV   4 # Reverse PWM_MAIN Ch. 3 (Bit 2)
 
 # PWM MAIN Ch. 4 -> Gimbal Yaw
 param set-default PWM_MAIN_FUNC4 422
@@ -89,67 +155,3 @@ param set-default PWM_MAIN_TIM0 400
 
 # Start the PWM output driver module
 pwm_out start
-
-#------------------------------------------------------------------------------
-# Commander Module
-#------------------------------------------------------------------------------
-
-# Disable unused safety checks
-param set-default COM_ARM_MAG_STR 0
-param set-default COM_ARM_SDCARD 0
-param set-default COM_CPU_MAX -1
-param set-default CBRK_SUPPLY_CHK 894281
-param set-default COM_MOT_TEST_EN 0
-
-# Allow arming without GPS
-param set-default COM_ARM_WO_GPS 1
-
-# Set the prearmed state to 2 (always)
-param set-default COM_PREARM_MODE 2
-
-# Start the commander module
-commander start
-
-#------------------------------------------------------------------------------
-# Open-Gimbal Module
-#------------------------------------------------------------------------------
-
-# A limit of [-180, 180] is set by default
-param set-default OG_RANGE_PITCH   0
-param set-default OG_RANGE_ROLL    0
-param set-default OG_RANGE_YAW     0
-
-# Roll PID Gains
-param set-default OG_ROLL_P     0.05
-param set-default OG_ROLL_I     0.10
-param set-default OG_ROLL_D     0.00
-param set-default OG_ROLL_IMAX  0.20
-param set-default OG_ROLL_FF    0.50
-
-# Pitch PID Gains
-param set-default OG_PITCH_P    0.05
-param set-default OG_PITCH_I    0.20
-param set-default OG_PITCH_D    0.00
-param set-default OG_PITCH_IMAX 0.40
-param set-default OG_PITCH_FF   0.50
-
-# Yaw PID Gains
-param set-default OG_YAW_P      0.05
-param set-default OG_YAW_I      0.10
-param set-default OG_YAW_D      0.00
-param set-default OG_YAW_IMAX   0.20
-param set-default OG_YAW_FF     0.30
-
-## Manually setting the motor zero offsets for easier debugging
-param set-default OG_OFF_ROLL  0
-param set-default OG_OFF_PITCH 0
-param set-default OG_OFF_YAW   0
-
-param set OG_OFF_ROLL -45.0
-
-param set-default OG_DEBUG1 20
-param set-default OG_DEBUG2 0
-param set-default OG_DEBUG3 2
-
-# Start Open-Gimbal
-open_gimbal start
