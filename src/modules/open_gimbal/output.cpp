@@ -43,7 +43,7 @@
 #define DELTA_T_MAX 0.02f
 
 // Maximum output angular velocity in rad/s
-#define MAX_ANGULAR_VEL 10.0f
+#define ANG_VEL_LIMIT 20.0f
 
 // Scale factor for the rate controller output
 #define RATE_SCALE_FACTOR ( 2U )
@@ -199,10 +199,11 @@ int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec )
             sp_error( i ) = ( ( _angle_setpoint( i ) - zero_offsets_rad( i ) ) - _gimbal_output_rad( i ) );
 
             // Convert the setpoint error to rad/s and apply a speed limit
-            rates_sp_rad_s( i ) = math::constrain( sp_error( i ) / dt, -_parameters.og_debug1, _parameters.og_debug1 );
+            rates_sp_rad_s( i ) = math::constrain( sp_error( i ) / dt, -ANG_VEL_LIMIT, ANG_VEL_LIMIT );
         }
         else
         {
+            // DEBUG: Print a message if the setpoint is not finite
             if ( _parameters.og_debug2 > 0.0f )
             {
                 PX4_ERR(
@@ -210,6 +211,7 @@ int OutputBase::_calculate_angle_output( const hrt_abstime &t_usec )
                     (double)_angle_setpoint( 1 ), (double)_angle_setpoint( 2 )
                 );
             }
+
             // If the setpoint is not finite, set the setpoint to the current angle
             rates_sp_rad_s( i ) = rates_rad_s( i );
         }
