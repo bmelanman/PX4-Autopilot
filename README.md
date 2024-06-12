@@ -1,3 +1,19 @@
+# PX4 Autopilot for the Open-Gimbal Project
+
+This is a fork of the PX4 Autopilot project, used for my senior project "Open-Gimbal", to implement a fully operation and self-stabilizing gimbal system for a drone.
+
+A new module has been added in `src/modules/open_gimbal` to handle motor control and stabilization. The existing `gimbal` module has been modified slightly to add a simple CLI testing interface to test DroneCAN control functionality from a flight controller to the gimbal (I didn't want to buy a proper RC remote).
+
+The Open-Gimbal design is currently based on the ARK CANnode as the main controller, so many of the initialization and setup files in `boards/ark/cannode` have been modified as well.
+
+I've also added a new actuator drivers for DroneCAN communication in `src/drivers/uavcan/actuators/camera_gimbal.hpp` and `src/drivers/uavcannode/Subscribers/GimbalAngularCommand.hpp`.
+
+Check out the [Open-Gimbal Project](https://github.com/bmelanman/open-gimbal) for more information on the hardware and design of the gimbal system.
+
+Thanks! :)
+
+---
+
 # PX4 Drone Autopilot
 
 [![Releases](https://img.shields.io/github/release/PX4/PX4-Autopilot.svg)](https://github.com/PX4/PX4-Autopilot/releases) [![DOI](https://zenodo.org/badge/22634/PX4/PX4-Autopilot.svg)](https://zenodo.org/badge/latestdoi/22634/PX4/PX4-Autopilot)
@@ -136,11 +152,3 @@ The PX4 Autopilot project including all of its trademarks is hosted under [Drone
 <a href="https://www.dronecode.org/" style="padding:20px" ><img src="https://mavlink.io/assets/site/logo_dronecode.png" alt="Dronecode Logo" width="110px"/></a>
 <a href="https://www.linuxfoundation.org/projects" style="padding:20px;"><img src="https://mavlink.io/assets/site/logo_linux_foundation.png" alt="Linux Foundation Logo" width="80px" /></a>
 <div style="padding:10px">&nbsp;</div>
-
-## Test Change
-
-This is a test change to make sure things are working properly.
-
-This sentence is for the second test!
-
-And this will be the final test :)
