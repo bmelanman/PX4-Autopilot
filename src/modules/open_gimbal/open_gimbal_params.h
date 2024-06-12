@@ -57,6 +57,7 @@ struct Parameters
     float og_off_roll;
     float og_off_yaw;
 
+    float og_rate_roll;
     float og_rate_pitch;
     float og_rate_yaw;
 
@@ -109,6 +110,7 @@ struct ParameterHandles
     param_t og_off_roll;
     param_t og_off_yaw;
 
+    param_t og_rate_roll;
     param_t og_rate_pitch;
     param_t og_rate_yaw;
 

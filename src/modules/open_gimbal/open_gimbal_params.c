@@ -223,6 +223,19 @@ PARAM_DEFINE_FLOAT(OG_OFF_YAW, 0.0f);
  * @group Open-Gimbal
  */
 // TODO: Remove?
+PARAM_DEFINE_FLOAT(OG_RATE_ROLL, 30.0f);
+
+/**
+ * Angular pitch rate for manual input in degrees/second.
+ *
+ * Full stick input [-1..1] translats to [-pitch rate..pitch rate].
+ *
+ * @min 1.0
+ * @max 90.0
+ * @unit deg/s
+ * @group Open-Gimbal
+ */
+// TODO: Remove?
 PARAM_DEFINE_FLOAT(OG_RATE_PITCH, 30.0f);
 
 /**
