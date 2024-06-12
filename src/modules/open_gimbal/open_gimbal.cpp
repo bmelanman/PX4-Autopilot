@@ -543,19 +543,14 @@ int open_gimbal_main( int argc, char *argv[] )
     return PX4_ERROR;
 }
 
-#define INIT_PARAM( handle, name )                                                      \
-    do                                                                                  \
-    {                                                                                   \
-        handle = param_find( name );                                                    \
-        if ( ( handle ) == PARAM_INVALID ) PX4_ERR( "failed to find parameter " name ); \
-    } while ( 0 )
+#define INIT_PARAM( handle, name ) \
+    if ( ( handle = param_find_no_notification( name ) ) == PARAM_INVALID ) PX4_ERR( "failed to find parameter " name )
 
-#define UPDATE_PARAM( handles, params, name )                                                          \
-    do                                                                                                 \
-    {                                                                                                  \
-        if ( param_get( handles.name, &params.name ) != PX4_OK )                                       \
-            PX4_ERR( "failed to update parameter `" #name "` (set to %d)", (int)( params.name = 0 ) ); \
-    } while ( 0 )
+//! Why do certain parameters sometimes fail to update?
+// TODO: Remove `param_find_no_notification( name ) == PARAM_INVALID ||` once the issue is resolved
+#define UPDATE_PARAM( handles, params, name )                \
+    if ( param_get( handles.name, &params.name ) != PX4_OK ) \
+    PX4_ERR( "failed to update parameter `" #name "` (set to %d)", (int)( params.name = 0 ) )
 
 void update_params( ParameterHandles &param_handles, Parameters &params )
 {
@@ -576,6 +571,7 @@ void update_params( ParameterHandles &param_handles, Parameters &params )
     UPDATE_PARAM( param_handles, params, og_off_roll );
     UPDATE_PARAM( param_handles, params, og_off_yaw );
 
+    UPDATE_PARAM( param_handles, params, og_rate_roll );
     UPDATE_PARAM( param_handles, params, og_rate_pitch );
     UPDATE_PARAM( param_handles, params, og_rate_yaw );
 
